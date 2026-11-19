@@ -1,0 +1,7 @@
+{
+  "_comment": "Template schema only. Do NOT commit real credentials. Generate private/config/admin.json using private/cli/setup-admin.php or private one-time web setup.",
+  "username": "administrator",
+  "passwordHash": "$2y$10$EXAMPLE_HASH_GENERATED_BY_PASSWORD_HASH",
+  "createdAt": "2026-01-01T00:00:00Z",
+  "updatedAt": "2026-01-01T00:00:00Z"
+}

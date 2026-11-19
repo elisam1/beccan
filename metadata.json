@@ -1,0 +1,6 @@
+{
+  "name": "Beccan School",
+  "description": "Official school website for Beccan School in Dodowa, Greater Accra Region, Ghana — Excellence, Discipline, Success.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
