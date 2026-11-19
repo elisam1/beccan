@@ -13,19 +13,13 @@ export function GalleryCard({ item, onSelect }: GalleryCardProps) {
       <button
         type="button"
         onClick={() => onSelect(item)}
-        className="relative text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B58E43]"
+        className="relative text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B58E43] cursor-pointer"
         aria-label={`Inspect ${item.title}`}
       >
         <SchoolImage
           src={item.imageUrl}
           alt={item.imageAlt || item.title}
           title={item.title}
-          verificationStatus={item.verificationStatus}
-          placeholderLabel={
-            item.verificationStatus === 'safeguarding-hold'
-              ? 'Safeguarding Hold · Consent Required'
-              : 'Photography Slot Reserved'
-          }
           aspectRatioClass="aspect-[4/3]"
           imgClassName="transition-transform duration-300 group-hover:scale-[1.03]"
         />
@@ -52,10 +46,6 @@ export function GalleryCard({ item, onSelect }: GalleryCardProps) {
             {item.caption}
           </p>
         </div>
-
-        <p className="mt-4 pt-3 border-t border-[#E6DFD3] text-xs text-[#5B6472]">
-          Source: {item.sourceAttribution}
-        </p>
       </div>
     </article>
   );

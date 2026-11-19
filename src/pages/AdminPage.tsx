@@ -19,7 +19,7 @@ import { AdminGallerySection } from '../components/admin/AdminGallerySection';
 import { AdminNewsSection } from '../components/admin/AdminNewsSection';
 import { AdminOverviewSection } from '../components/admin/AdminOverviewSection';
 import { AdminSettingsSection } from '../components/admin/AdminSettingsSection';
-import { SchoolCrest } from '../components/common/SchoolCrest';
+import { SchoolWordmark } from '../components/common/SchoolWordmark';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { ApiError, cmsApi } from '../services/cmsApi';
 import { SessionState } from '../types/cms';
@@ -111,16 +111,11 @@ export function AdminPage() {
     <div className="min-h-screen bg-[#FBF9F5] text-[#141B29] flex flex-col lg:flex-row">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex lg:w-68 lg:flex-col bg-[#0F213E] text-[#FBF9F5] border-r border-[#172E54] shrink-0">
-        <div className="px-6 py-6 border-b border-[#172E54] flex items-center gap-3">
-          <SchoolCrest variant="gold" className="w-8 h-8 shrink-0" />
-          <div>
-            <p className="font-serif text-xl font-semibold text-[#FBF9F5]">
-              Beccan School
-            </p>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-[#D4B46E]">
-              Admin Portal
-            </p>
-          </div>
+        <div className="px-6 py-6 border-b border-[#172E54] space-y-2">
+          <SchoolWordmark variant="light" size="md" />
+          <p className="text-[11px] uppercase tracking-[0.16em] text-[#D4B46E]">
+            Admin Portal
+          </p>
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1" aria-label="Admin navigation">
@@ -167,9 +162,9 @@ export function AdminPage() {
       {/* Mobile Top Bar */}
       <header className="lg:hidden sticky top-0 z-40 h-16 bg-[#0F213E] text-[#FBF9F5] px-4 flex items-center justify-between border-b border-[#172E54]">
         <div className="flex items-center gap-2.5">
-          <SchoolCrest variant="gold" className="w-7 h-7" />
-          <span className="font-serif text-lg font-semibold">
-            Beccan Admin
+          <SchoolWordmark variant="light" size="sm" />
+          <span className="text-[11px] uppercase tracking-[0.14em] text-[#D4B46E]">
+            Admin
           </span>
         </div>
 

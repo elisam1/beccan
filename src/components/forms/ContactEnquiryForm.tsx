@@ -1,7 +1,13 @@
-import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { schoolRepository } from '../../services/schoolRepository';
 import { isNonEmpty, isValidEmail, isValidGhanaPhone } from '../../utils/validation';
+import {
+  buildContactWhatsAppMessage,
+  buildWhatsAppUrl,
+  openWhatsAppUrl,
+} from '../../utils/whatsapp';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 
 interface ContactFormState {
   fullName: string;
@@ -25,7 +31,10 @@ export function ContactEnquiryForm() {
   const profile = schoolRepository.getProfile();
   const [form, setForm] = useState<ContactFormState>(initialContactState);
   const [errors, setErrors] = useState<ContactErrors>({});
-  const [submitted, setSubmitted] = useState<ContactFormState | null>(null);
+  const [submitted, setSubmitted] = useState<{
+    data: ContactFormState;
+    whatsappUrl: string;
+  } | null>(null);
 
   const validate = (values: ContactFormState): ContactErrors => {
     const nextErrors: ContactErrors = {};
@@ -36,8 +45,8 @@ export function ContactEnquiryForm() {
       nextErrors.phone =
         'Enter a valid Ghanaian telephone number (e.g. 024-740-1641).';
     }
-    if (!isValidEmail(values.email)) {
-      nextErrors.email = 'Please enter a valid email address.';
+    if (values.email.trim() !== '' && !isValidEmail(values.email)) {
+      nextErrors.email = 'Please enter a valid email address or leave this blank.';
     }
     if (!isNonEmpty(values.message, 10)) {
       nextErrors.message = 'Please enter a short message (at least 10 characters).';
@@ -50,11 +59,15 @@ export function ContactEnquiryForm() {
     const validationErrors = validate(form);
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length === 0) {
-      setSubmitted(form);
+      const whatsappMessage = buildContactWhatsAppMessage(form);
+      const whatsappUrl = buildWhatsAppUrl(whatsappMessage);
+      openWhatsAppUrl(whatsappUrl);
+      setSubmitted({ data: form, whatsappUrl });
     }
   };
 
   if (submitted) {
+    const { data, whatsappUrl } = submitted;
     return (
       <div
         className="bg-[#FFFFFF] border border-[#E6DFD3] p-6 sm:p-8 space-y-5"
@@ -62,30 +75,29 @@ export function ContactEnquiryForm() {
         aria-live="polite"
       >
         <div className="flex items-start gap-3">
-          <CheckCircle2 className="w-6 h-6 text-[#8D6A26] shrink-0 mt-0.5" />
+          <CheckCircle2 className="w-6 h-6 text-[#15803D] shrink-0 mt-0.5" />
           <div>
             <h3 className="font-serif text-2xl font-semibold text-[#0F213E]">
-              Message Ready (Demonstration Mode)
+              WhatsApp Prepared — Please Press Send to Complete
             </h3>
-            <p className="mt-1 text-sm text-[#333D4D] leading-relaxed">
-              Thank you, {submitted.fullName}. Your enquiry has been validated
-              locally. As this demonstration website is not yet connected to a
-              live email relay, you can send it directly via your email app or
-              call {profile.contact.telephoneDisplay}.
+            <p className="mt-1.5 text-sm text-[#333D4D] leading-relaxed">
+              Thank you, {data.fullName}. Your enquiry has been prepared for
+              Beccan School on WhatsApp ({profile.contact.whatsappDisplay}).
+              Please review the message in WhatsApp and press{' '}
+              <strong>Send</strong> to deliver it to our school office.
             </p>
           </div>
         </div>
 
         <div className="pt-4 border-t border-[#E6DFD3] flex flex-wrap gap-3">
           <a
-            href={`mailto:${profile.contact.email}?subject=${encodeURIComponent(
-              submitted.subject,
-            )}&body=${encodeURIComponent(
-              `From: ${submitted.fullName}\nPhone: ${submitted.phone}\nEmail: ${submitted.email}\n\n${submitted.message}`,
-            )}`}
-            className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium hover:bg-[#172E54] transition-colors"
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#15803D] text-[#FFFFFF] text-sm font-semibold hover:bg-[#166534] transition-colors"
           >
-            Send via Email Client
+            <WhatsAppIcon className="w-4 h-4 shrink-0" />
+            <span>Open WhatsApp Again</span>
           </a>
           <button
             type="button"
@@ -93,7 +105,7 @@ export function ContactEnquiryForm() {
               setForm(initialContactState);
               setSubmitted(null);
             }}
-            className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 border border-[#D4C8B4] bg-[#FBF9F5] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors"
+            className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 border border-[#D4C8B4] bg-[#FBF9F5] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors cursor-pointer"
           >
             Write Another Message
           </button>
@@ -108,22 +120,6 @@ export function ContactEnquiryForm() {
       noValidate
       className="bg-[#FFFFFF] border border-[#E6DFD3] p-6 sm:p-8 space-y-5"
     >
-      <div className="flex items-start gap-3 p-4 bg-[#F4EFE6] border border-[#E6DFD3] text-xs sm:text-sm text-[#333D4D]">
-        <Info className="w-4 h-4 text-[#8D6A26] shrink-0 mt-0.5" />
-        <p>
-          <strong>Demonstration Contact Form:</strong> Validates your message on
-          this page until connected to the school’s official mail server. For
-          immediate assistance, call{' '}
-          <a
-            href={profile.contact.telephoneHref}
-            className="underline font-medium text-[#0F213E] tabular-nums"
-          >
-            {profile.contact.telephoneDisplay}
-          </a>
-          .
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div>
           <label
@@ -178,7 +174,7 @@ export function ContactEnquiryForm() {
             htmlFor="contact-email"
             className="block text-sm font-medium text-[#0F213E] mb-1.5"
           >
-            Email Address <span className="text-[#8D6A26]">*</span>
+            Email Address (Optional)
           </label>
           <input
             id="contact-email"
@@ -215,6 +211,7 @@ export function ContactEnquiryForm() {
               Admissions & Campus Visit
             </option>
             <option value="Academics & Curriculum">Academics & Curriculum</option>
+            <option value="School Facilities & Tours">School Facilities & Tours</option>
             <option value="Parent / Community Partnership">
               Parent / Community Partnership
             </option>
@@ -246,13 +243,24 @@ export function ContactEnquiryForm() {
         </div>
       </div>
 
-      <div className="pt-2 flex justify-end">
-        <button
-          type="submit"
-          className="min-h-[44px] px-7 py-3 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium tracking-wide hover:bg-[#172E54] transition-colors cursor-pointer"
-        >
-          Validate & Send Message
-        </button>
+      <div className="pt-4 border-t border-[#E6DFD3] space-y-4">
+        <p className="text-xs sm:text-sm text-[#4A5568] leading-relaxed">
+          Your enquiry details will open in WhatsApp. Please review the message
+          and press Send to submit your enquiry to the school.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p className="text-xs text-[#5B6472]">
+            Fields marked with <span className="text-[#8D6A26]">*</span> are required.
+          </p>
+          <button
+            type="submit"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-7 py-3 bg-[#15803D] text-[#FFFFFF] text-sm font-semibold tracking-wide hover:bg-[#166534] transition-colors cursor-pointer"
+          >
+            <WhatsAppIcon className="w-4 h-4 shrink-0" />
+            <span>Send Enquiry via WhatsApp</span>
+          </button>
+        </div>
       </div>
     </form>
   );

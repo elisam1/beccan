@@ -2,7 +2,9 @@ import { Mail, Phone, X } from 'lucide-react';
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { schoolRepository } from '../../services/schoolRepository';
-import { SchoolCrest } from '../common/SchoolCrest';
+import { buildWhatsAppUrl, WHATSAPP_MESSAGES } from '../../utils/whatsapp';
+import { SchoolWordmark } from '../common/SchoolWordmark';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 
 interface MobileDrawerProps {
   isOpen: boolean;
@@ -22,6 +24,7 @@ const mobileNavLinks = [
 
 export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   const profile = schoolRepository.getProfile();
+  const whatsappHref = buildWhatsAppUrl(WHATSAPP_MESSAGES.general);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -57,16 +60,11 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
       />
       <nav className="relative ml-auto flex h-full w-full max-w-sm flex-col bg-[#FBF9F5] border-l border-[#E6DFD3] shadow-xl overflow-y-auto">
         <div className="flex items-center justify-between px-6 h-16 border-b border-[#E6DFD3]">
-          <div className="flex items-center gap-2.5">
-            <SchoolCrest className="w-7 h-7 shrink-0" />
-            <span className="font-serif text-xl font-semibold text-[#0F213E] whitespace-nowrap">
-              {profile.name}
-            </span>
-          </div>
+          <SchoolWordmark variant="navy" size="sm" />
           <button
             type="button"
             onClick={onClose}
-            className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-[#0F213E] hover:bg-[#F4EFE6] transition-colors"
+            className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-[#0F213E] hover:bg-[#F4EFE6] transition-colors cursor-pointer"
             aria-label="Close navigation menu"
           >
             <X className="w-5 h-5" />
@@ -97,17 +95,27 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
           <p className="text-xs uppercase tracking-[0.16em] text-[#D4B46E]">
             {profile.motto}
           </p>
-          <div className="space-y-2 text-sm text-[#D4DCE8]">
+          <a
+            href={whatsappHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={onClose}
+            className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#15803D] text-[#FFFFFF] text-sm font-semibold hover:bg-[#166534] transition-colors"
+          >
+            <WhatsAppIcon className="w-4 h-4 shrink-0" />
+            <span>Chat on WhatsApp ({profile.contact.whatsappDisplay})</span>
+          </a>
+          <div className="space-y-1.5 text-sm text-[#D4DCE8]">
             <a
               href={profile.contact.telephoneHref}
-              className="min-h-[44px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors tabular-nums"
+              className="min-h-[40px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors tabular-nums"
             >
               <Phone className="w-4 h-4 text-[#D4B46E] shrink-0" />
               <span>{profile.contact.telephoneDisplay}</span>
             </a>
             <a
               href={`mailto:${profile.contact.email}`}
-              className="min-h-[44px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors"
+              className="min-h-[40px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors"
             >
               <Mail className="w-4 h-4 text-[#D4B46E] shrink-0" />
               <span>{profile.contact.email}</span>

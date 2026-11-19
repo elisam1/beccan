@@ -1,7 +1,9 @@
 import { Mail, MapPin, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { schoolRepository } from '../../services/schoolRepository';
-import { SchoolCrest } from '../common/SchoolCrest';
+import { buildWhatsAppUrl, WHATSAPP_MESSAGES } from '../../utils/whatsapp';
+import { SchoolWordmark } from '../common/SchoolWordmark';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 
 const schoolLinks = [
   { to: '/', label: 'Home' },
@@ -20,6 +22,7 @@ const campusLinks = [
 export function Footer() {
   const profile = schoolRepository.getProfile();
   const currentYear = new Date().getFullYear();
+  const whatsappHref = buildWhatsAppUrl(WHATSAPP_MESSAGES.general);
 
   return (
     <footer className="bg-[#0F213E] text-[#FBF9F5] border-t border-[#172E54]">
@@ -27,24 +30,27 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 lg:gap-12">
           {/* Identity */}
           <div className="md:col-span-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <SchoolCrest variant="gold" className="w-9 h-9 shrink-0" />
-              <div>
-                <p className="font-serif text-2xl font-semibold text-[#FBF9F5]">
-                  {profile.name}
-                </p>
-                <p className="text-xs uppercase tracking-[0.16em] text-[#D4B46E]">
-                  {profile.motto}
-                </p>
-              </div>
+            <div className="space-y-2">
+              <SchoolWordmark variant="light" size="lg" />
+              <p className="text-xs uppercase tracking-[0.16em] text-[#D4B46E]">
+                {profile.motto}
+              </p>
             </div>
             <p className="text-sm text-[#D4DCE8] leading-relaxed max-w-md">
               A private basic school in Dodowa, Shai-Osudoku District, Greater Accra
               Region, Ghana—nurturing academic excellence, discipline, and character.
             </p>
-            <p className="text-xs text-[#A3B3C9]">
-              Temporary wordmark emblem shown pending official crest verification.
-            </p>
+            <div className="pt-1">
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-h-[40px] inline-flex items-center gap-2 px-4 py-2 bg-[#15803D] text-[#FFFFFF] text-xs sm:text-sm font-semibold hover:bg-[#166534] transition-colors"
+              >
+                <WhatsAppIcon className="w-4 h-4 shrink-0" />
+                <span>Chat on WhatsApp</span>
+              </a>
+            </div>
           </div>
 
           {/* Navigation columns */}
@@ -86,10 +92,21 @@ export function Footer() {
                 </ul>
               </div>
 
-              <div className="space-y-2.5 pt-2 border-t border-[#172E54] text-sm text-[#D4DCE8]">
+              <div className="space-y-2.5 pt-3 border-t border-[#172E54] text-sm text-[#D4DCE8]">
                 <div className="flex items-start gap-2.5">
                   <MapPin className="w-4 h-4 text-[#D4B46E] shrink-0 mt-0.5" />
                   <span>{profile.contact.campusLabel}</span>
+                </div>
+                <div className="flex items-center gap-2.5 tabular-nums">
+                  <WhatsAppIcon className="w-4 h-4 text-[#4ADE80] shrink-0" />
+                  <a
+                    href={whatsappHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-[#FBF9F5] transition-colors"
+                  >
+                    WhatsApp: {profile.contact.whatsappDisplay}
+                  </a>
                 </div>
                 <div className="flex items-center gap-2.5 tabular-nums">
                   <Phone className="w-4 h-4 text-[#D4B46E] shrink-0" />
@@ -119,16 +136,12 @@ export function Footer() {
             © {currentYear} {profile.name} · {profile.contact.town},{' '}
             {profile.contact.region}, {profile.contact.country}. All rights reserved.
           </p>
-          <div className="flex items-center gap-4">
-            <span>Official school records take precedence</span>
-            <span aria-hidden="true">·</span>
-            <Link
-              to="/admin"
-              className="text-[#D4DCE8] hover:text-[#D4B46E] transition-colors"
-            >
-              Admin Portal
-            </Link>
-          </div>
+          <Link
+            to="/admin"
+            className="text-[#D4DCE8] hover:text-[#D4B46E] transition-colors"
+          >
+            Admin Portal
+          </Link>
         </div>
       </div>
     </footer>

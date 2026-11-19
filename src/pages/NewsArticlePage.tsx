@@ -1,11 +1,16 @@
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { PageBanner } from '../components/layout/PageBanner';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { ApiError, cmsApi } from '../services/cmsApi';
 import { CmsNewsArticle } from '../types/cms';
 import { formatDisplayDate, splitParagraphs } from '../utils/formatting';
+import {
+  buildArticleWhatsAppMessage,
+  buildWhatsAppUrl,
+} from '../utils/whatsapp';
 
 export function NewsArticlePage() {
   const { slug } = useParams<{ slug: string }>();
@@ -148,12 +153,25 @@ export function NewsArticlePage() {
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to all News & Events</span>
               </Link>
-              <Link
-                to="/admissions"
-                className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium hover:bg-[#172E54] transition-colors"
-              >
-                Admission Enquiries
-              </Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href={buildWhatsAppUrl(
+                    buildArticleWhatsAppMessage(article.title),
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#128C7E] text-[#FFFFFF] text-sm font-semibold hover:bg-[#0E7367] transition-colors whitespace-nowrap"
+                >
+                  <WhatsAppIcon className="w-4 h-4" />
+                  <span>Message us on WhatsApp</span>
+                </a>
+                <Link
+                  to="/admissions"
+                  className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium hover:bg-[#172E54] transition-colors"
+                >
+                  Admission Enquiries
+                </Link>
+              </div>
             </div>
           </div>
         </div>

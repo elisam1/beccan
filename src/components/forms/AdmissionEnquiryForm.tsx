@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { schoolRepository } from '../../services/schoolRepository';
 import {
@@ -7,6 +7,12 @@ import {
   isValidEmail,
   isValidGhanaPhone,
 } from '../../utils/validation';
+import {
+  buildAdmissionWhatsAppMessage,
+  buildWhatsAppUrl,
+  openWhatsAppUrl,
+} from '../../utils/whatsapp';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 
 interface AdmissionFormState {
   studentName: string;
@@ -33,20 +39,21 @@ const initialFormState: AdmissionFormState = {
 };
 
 const classOptions = [
-  'Early Years / Crèche & Nursery (Availability to be confirmed)',
+  'Early Years / Crèche & Nursery',
   'Kindergarten (KG 1 / KG 2)',
   'Lower Primary (Basic 1 – 3)',
   'Upper Primary (Basic 4 – 6)',
-  'Junior High School (JHS 1 – 3 · Availability to be confirmed)',
+  'Junior High School (JHS 1 – 3)',
 ];
 
 export function AdmissionEnquiryForm() {
   const profile = schoolRepository.getProfile();
   const [form, setForm] = useState<AdmissionFormState>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [submittedData, setSubmittedData] = useState<AdmissionFormState | null>(
-    null,
-  );
+  const [submittedData, setSubmittedData] = useState<{
+    data: AdmissionFormState;
+    whatsappUrl: string;
+  } | null>(null);
 
   const validate = (values: AdmissionFormState): FormErrors => {
     const nextErrors: FormErrors = {};
@@ -69,8 +76,8 @@ export function AdmissionEnquiryForm() {
       nextErrors.phone =
         'Enter a valid Ghanaian telephone number (e.g. 024-740-1641).';
     }
-    if (!isValidEmail(values.email)) {
-      nextErrors.email = 'Please enter a valid email address.';
+    if (values.email.trim() !== '' && !isValidEmail(values.email)) {
+      nextErrors.email = 'Please enter a valid email address or leave this blank.';
     }
     return nextErrors;
   };
@@ -80,7 +87,10 @@ export function AdmissionEnquiryForm() {
     const validationErrors = validate(form);
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length === 0) {
-      setSubmittedData(form);
+      const message = buildAdmissionWhatsAppMessage(form);
+      const whatsappUrl = buildWhatsAppUrl(message);
+      openWhatsAppUrl(whatsappUrl);
+      setSubmittedData({ data: form, whatsappUrl });
     }
   };
 
@@ -91,6 +101,7 @@ export function AdmissionEnquiryForm() {
   };
 
   if (submittedData) {
+    const { data, whatsappUrl } = submittedData;
     return (
       <div
         className="bg-[#FFFFFF] border border-[#E6DFD3] p-6 sm:p-8 space-y-5"
@@ -98,16 +109,16 @@ export function AdmissionEnquiryForm() {
         aria-live="polite"
       >
         <div className="flex items-start gap-3 text-[#0F213E]">
-          <CheckCircle2 className="w-6 h-6 text-[#8D6A26] shrink-0 mt-0.5" />
+          <CheckCircle2 className="w-6 h-6 text-[#15803D] shrink-0 mt-0.5" />
           <div>
             <h3 className="font-serif text-2xl font-semibold">
-              Admission Enquiry Validated (Demonstration Mode)
+              WhatsApp Prepared — Please Press Send to Complete
             </h3>
-            <p className="mt-1 text-sm text-[#333D4D] leading-relaxed">
-              Thank you, {submittedData.parentName}. Your enquiry details for{' '}
-              <strong>{submittedData.studentName}</strong> passed client-side
-              validation. Because this demonstration site is not yet connected to
-              a live school database, no record has been transmitted automatically.
+            <p className="mt-1.5 text-sm text-[#333D4D] leading-relaxed">
+              Thank you, {data.parentName}. Your admission enquiry for{' '}
+              <strong>{data.studentName}</strong> has been formatted for WhatsApp.
+              To submit it to Beccan School ({profile.contact.whatsappDisplay}),
+              please review the message in WhatsApp and press <strong>Send</strong>.
             </p>
           </div>
         </div>
@@ -115,56 +126,55 @@ export function AdmissionEnquiryForm() {
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#E6DFD3] text-sm">
           <div>
             <dt className="text-xs uppercase tracking-[0.12em] text-[#5B6472]">
-              Learner
+              Applicant
             </dt>
             <dd className="mt-1 font-medium text-[#0F213E]">
-              {submittedData.studentName} ({submittedData.gender})
+              {data.studentName} ({data.gender})
             </dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-[0.12em] text-[#5B6472]">
-              Preferred Level
+              Class Applying For
             </dt>
             <dd className="mt-1 font-medium text-[#0F213E]">
-              {submittedData.targetClass}
+              {data.targetClass}
             </dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-[0.12em] text-[#5B6472]">
-              Parent Contact
+              Parent / Guardian Contact
             </dt>
             <dd className="mt-1 font-medium text-[#0F213E] tabular-nums">
-              {submittedData.phone} · {submittedData.email}
+              {data.phone}
+              {data.email.trim() ? ` · ${data.email.trim()}` : ''}
             </dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-[0.12em] text-[#5B6472]">
-              Direct School Office
+              School WhatsApp Line
             </dt>
             <dd className="mt-1 font-medium text-[#0F213E] tabular-nums">
-              Call {profile.contact.telephoneDisplay} or email{' '}
-              {profile.contact.email}
+              {profile.contact.whatsappDisplay}
             </dd>
           </div>
         </dl>
 
-        <div className="pt-4 border-t border-[#E6DFD3] flex flex-wrap items-center gap-4">
+        <div className="pt-4 border-t border-[#E6DFD3] flex flex-wrap items-center gap-3">
           <a
-            href={`mailto:${profile.contact.email}?subject=${encodeURIComponent(
-              `Admission Enquiry: ${submittedData.studentName}`,
-            )}&body=${encodeURIComponent(
-              `Learner: ${submittedData.studentName}\nDOB: ${submittedData.dateOfBirth}\nClass: ${submittedData.targetClass}\nParent: ${submittedData.parentName}\nPhone: ${submittedData.phone}\nNotes: ${submittedData.notes}`,
-            )}`}
-            className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium hover:bg-[#172E54] transition-colors"
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#15803D] text-[#FFFFFF] text-sm font-semibold hover:bg-[#166534] transition-colors"
           >
-            Open in Email Client
+            <WhatsAppIcon className="w-4 h-4 shrink-0" />
+            <span>Open WhatsApp Again</span>
           </a>
           <button
             type="button"
             onClick={handleReset}
-            className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 border border-[#D4C8B4] bg-[#FBF9F5] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors"
+            className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 border border-[#D4C8B4] bg-[#FBF9F5] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors cursor-pointer"
           >
-            Submit Another Enquiry
+            Prepare Another Application
           </button>
         </div>
       </div>
@@ -177,36 +187,13 @@ export function AdmissionEnquiryForm() {
       noValidate
       className="bg-[#FFFFFF] border border-[#E6DFD3] p-6 sm:p-8 space-y-6"
     >
-      <div className="flex items-start gap-3 p-4 bg-[#F4EFE6] border border-[#E6DFD3] text-xs sm:text-sm text-[#333D4D]">
-        <Info className="w-4 h-4 text-[#8D6A26] shrink-0 mt-0.5" />
-        <p>
-          <strong>Demonstration Enquiry Form:</strong> Inputs are validated on
-          your device. Until connected to the school’s intake backend, please
-          follow up directly via{' '}
-          <a
-            href={profile.contact.telephoneHref}
-            className="underline font-medium text-[#0F213E] tabular-nums"
-          >
-            {profile.contact.telephoneDisplay}
-          </a>{' '}
-          or{' '}
-          <a
-            href={`mailto:${profile.contact.email}`}
-            className="underline font-medium text-[#0F213E]"
-          >
-            {profile.contact.email}
-          </a>
-          .
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="sm:col-span-2">
           <label
             htmlFor="adm-student-name"
             className="block text-sm font-medium text-[#0F213E] mb-1.5"
           >
-            Learner’s Full Name <span className="text-[#8D6A26]">*</span>
+            Applicant’s Full Name <span className="text-[#8D6A26]">*</span>
           </label>
           <input
             id="adm-student-name"
@@ -308,7 +295,7 @@ export function AdmissionEnquiryForm() {
             htmlFor="adm-parent"
             className="block text-sm font-medium text-[#0F213E] mb-1.5"
           >
-            Parent / Guardian Name <span className="text-[#8D6A26]">*</span>
+            Parent / Guardian’s Full Name <span className="text-[#8D6A26]">*</span>
           </label>
           <input
             id="adm-parent"
@@ -332,7 +319,7 @@ export function AdmissionEnquiryForm() {
             htmlFor="adm-phone"
             className="block text-sm font-medium text-[#0F213E] mb-1.5"
           >
-            Telephone Number <span className="text-[#8D6A26]">*</span>
+            Parent / Guardian Phone Number <span className="text-[#8D6A26]">*</span>
           </label>
           <input
             id="adm-phone"
@@ -356,7 +343,7 @@ export function AdmissionEnquiryForm() {
             htmlFor="adm-email"
             className="block text-sm font-medium text-[#0F213E] mb-1.5"
           >
-            Email Address <span className="text-[#8D6A26]">*</span>
+            Parent / Guardian Email (Optional)
           </label>
           <input
             id="adm-email"
@@ -393,16 +380,24 @@ export function AdmissionEnquiryForm() {
         </div>
       </div>
 
-      <div className="pt-2 flex flex-wrap items-center justify-between gap-4">
-        <p className="text-xs text-[#5B6472]">
-          Fields marked with <span className="text-[#8D6A26]">*</span> are required.
+      <div className="pt-4 border-t border-[#E6DFD3] space-y-4">
+        <p className="text-xs sm:text-sm text-[#4A5568] leading-relaxed">
+          Your application details will open in WhatsApp. Please review the
+          information and press Send to submit your enquiry to the school.
         </p>
-        <button
-          type="submit"
-          className="min-h-[44px] px-7 py-3 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium tracking-wide hover:bg-[#172E54] transition-colors cursor-pointer"
-        >
-          Validate & Review Enquiry
-        </button>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p className="text-xs text-[#5B6472]">
+            Fields marked with <span className="text-[#8D6A26]">*</span> are required.
+          </p>
+          <button
+            type="submit"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-7 py-3 bg-[#15803D] text-[#FFFFFF] text-sm font-semibold tracking-wide hover:bg-[#166534] transition-colors cursor-pointer"
+          >
+            <WhatsAppIcon className="w-4 h-4 shrink-0" />
+            <span>Submit via WhatsApp</span>
+          </button>
+        </div>
       </div>
     </form>
   );

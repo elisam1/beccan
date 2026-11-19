@@ -67,12 +67,12 @@ export function GalleryLightbox({
       >
         <div className="flex items-center justify-between px-5 py-3.5 bg-[#0F213E] text-[#FBF9F5]">
           <p className="text-xs uppercase tracking-[0.16em] text-[#D4B46E] tabular-nums">
-            Fig. {activeIndex + 1} of {items.length} · {activeItem.category}
+            Photo {activeIndex + 1} of {items.length} · {activeItem.category}
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center text-[#FBF9F5] hover:text-[#D4B46E] transition-colors"
+            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center text-[#FBF9F5] hover:text-[#D4B46E] transition-colors cursor-pointer"
             aria-label="Close lightbox"
           >
             <X className="w-5 h-5" />
@@ -85,12 +85,6 @@ export function GalleryLightbox({
               src={activeItem.imageUrl}
               alt={activeItem.imageAlt || activeItem.title}
               title={activeItem.title}
-              verificationStatus={activeItem.verificationStatus}
-              placeholderLabel={
-                activeItem.verificationStatus === 'safeguarding-hold'
-                  ? 'Safeguarding Hold · Parental Consent Required'
-                  : 'Official Photography Slot Reserved'
-              }
               aspectRatioClass="aspect-[16/10] max-h-[56vh] mx-auto"
               imgClassName="object-contain bg-[#0A1629]"
             />
@@ -103,13 +97,8 @@ export function GalleryLightbox({
             <p className="text-sm sm:text-base text-[#333D4D] leading-relaxed">
               {activeItem.caption}
             </p>
-            {activeItem.safeguardingNote && (
-              <p className="text-xs font-medium text-[#8D6A26]">
-                Safeguarding Policy: {activeItem.safeguardingNote}
-              </p>
-            )}
             <p className="text-xs text-[#5B6472] pt-2 border-t border-[#E6DFD3]">
-              Source: {activeItem.sourceAttribution} · {activeItem.dateLabel}
+              {activeItem.dateLabel}
             </p>
           </div>
         </div>
@@ -118,7 +107,7 @@ export function GalleryLightbox({
           <button
             type="button"
             onClick={handlePrev}
-            className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 bg-[#FFFFFF] border border-[#D4C8B4] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors"
+            className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 bg-[#FFFFFF] border border-[#D4C8B4] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4" />
             <span>Previous</span>
@@ -129,7 +118,7 @@ export function GalleryLightbox({
           <button
             type="button"
             onClick={handleNext}
-            className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 bg-[#FFFFFF] border border-[#D4C8B4] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors"
+            className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 bg-[#FFFFFF] border border-[#D4C8B4] text-sm font-medium text-[#0F213E] hover:border-[#0F213E] transition-colors cursor-pointer"
           >
             <span>Next</span>
             <ChevronRight className="w-4 h-4" />

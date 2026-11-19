@@ -1,45 +1,41 @@
-import { AlertCircle, ShieldCheck } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import campusPhoto from '../assets/images/beccan_campus_building.jpg';
 import { GalleryCard } from '../components/cards/GalleryCard';
+import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { GalleryLightbox } from '../components/gallery/GalleryLightbox';
 import { PageBanner } from '../components/layout/PageBanner';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
-import {
-  ApiError,
-  cmsApi,
-  GALLERY_CATEGORIES,
-} from '../services/cmsApi';
+import { cmsApi, GALLERY_CATEGORIES } from '../services/cmsApi';
 import { CmsGalleryPhoto } from '../types/cms';
 import { GalleryItem } from '../types/school';
 import { formatDisplayDate } from '../utils/formatting';
+import { buildWhatsAppUrl, WHATSAPP_MESSAGES } from '../utils/whatsapp';
 
 const categories = ['All', ...GALLERY_CATEGORIES] as const;
 
-const verifiedArchiveItem: GalleryItem = {
-  id: 'verified-campus-archive',
+const campusArchiveItem: GalleryItem = {
+  id: 'campus-main-courtyard',
   title: 'Main Campus Building & Courtyard',
   category: 'Campus & Grounds',
   caption:
     'Two-storey main school building, covered veranda, single-storey classroom wing, enclosed trampoline, and painted tire courtyard at Beccan School in Dodowa.',
-  sourceAttribution: 'Official website archive (beccanschool.site)',
-  dateLabel: 'Verified archive photo',
+  dateLabel: 'Dodowa Campus',
   imageUrl: campusPhoto,
   imageAlt:
-    'Beccan School Dodowa campus showing the main two-storey building, classroom wing, trampoline, and painted tire courtyard.',
-  verificationStatus: 'verified',
+    'Beccan School campus building, classroom wing, covered veranda, and courtyard in Dodowa.',
 };
 
 export function GalleryPage() {
   useDocumentMeta({
     title: 'Gallery',
     description:
-      'View verified and administrator-published campus photography of Beccan School in Dodowa, Ghana.',
+      'View campus photography, learning spaces, and school life at Beccan School in Dodowa, Ghana.',
   });
 
   const [publishedPhotos, setPublishedPhotos] = useState<CmsGalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [apiNotice, setApiNotice] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -51,16 +47,11 @@ export function GalleryPage() {
       .then((res) => {
         if (active) {
           setPublishedPhotos(res.items);
-          setApiNotice(null);
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (active) {
-          setApiNotice(
-            err instanceof ApiError
-              ? err.message
-              : 'Live gallery feed is unavailable in this environment.',
-          );
+          setPublishedPhotos([]);
         }
       })
       .finally(() => {
@@ -82,15 +73,13 @@ export function GalleryPage() {
         title: photo.caption,
         category: photo.category as GalleryItem['category'],
         caption: photo.description || photo.caption,
-        sourceAttribution: 'Beccan School Administration',
         dateLabel: `Published ${formatDisplayDate(photo.publishedAt || photo.uploadedAt)}`,
         imageUrl: photo.imageUrl,
         imageAlt: photo.caption,
-        verificationStatus: 'verified',
       }));
 
     if (selectedCategory === 'All' || selectedCategory === 'Facilities') {
-      return [...mappedCms, verifiedArchiveItem];
+      return [...mappedCms, campusArchiveItem];
     }
     return mappedCms;
   }, [publishedPhotos, selectedCategory]);
@@ -99,24 +88,10 @@ export function GalleryPage() {
     <div>
       <PageBanner
         kicker="School Gallery"
-        title="Campus photography & visual archive."
-        subtitle="Published campus photographs from Beccan School administration alongside our verified campus archive."
+        title="Campus photography & school life."
+        subtitle="Explore our Dodowa campus buildings, courtyard, learning environments, and student activities."
         currentPageLabel="Gallery"
       />
-
-      {/* Safeguarding Notice */}
-      <section className="bg-[#F4EFE6] border-b border-[#E6DFD3] py-6">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 flex items-start gap-3 text-sm text-[#333D4D]">
-          <ShieldCheck className="w-5 h-5 text-[#8D6A26] shrink-0 mt-0.5" />
-          <p>
-            <strong>Child-Safeguarding & Consent Policy:</strong> Only
-            photographs explicitly published by Beccan School administration
-            appear here. A legacy swimming photograph from beccanschool.site
-            remains withheld until signed parental image-use consent is
-            confirmed.
-          </p>
-        </div>
-      </section>
 
       <section className="py-14 sm:py-18 bg-[#FBF9F5]">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -149,19 +124,10 @@ export function GalleryPage() {
             </div>
 
             <p className="text-xs text-[#5B6472] tabular-nums">
-              Showing {displayItems.length} published photograph
+              Showing {displayItems.length} photograph
               {displayItems.length === 1 ? '' : 's'}
             </p>
           </div>
-
-          {apiNotice && (
-            <div className="mb-8 p-4 bg-[#FFFFFF] border border-[#E6DFD3] flex items-start gap-3 text-xs sm:text-sm text-[#5B6472]">
-              <AlertCircle className="w-4 h-4 text-[#8D6A26] shrink-0 mt-0.5" />
-              <span>
-                {apiNotice} Showing verified campus archive photography only.
-              </span>
-            </div>
-          )}
 
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7">
@@ -175,11 +141,11 @@ export function GalleryPage() {
           ) : displayItems.length === 0 ? (
             <div className="p-12 bg-[#FFFFFF] border border-[#E6DFD3] text-center space-y-2">
               <p className="font-serif text-2xl font-semibold text-[#0F213E]">
-                No published photographs in {selectedCategory} yet
+                No photographs in {selectedCategory} yet
               </p>
               <p className="text-sm text-[#5B6472]">
-                Photographs published by Beccan School administration under{' '}
-                {selectedCategory} will appear here automatically.
+                Additional school photographs added under {selectedCategory} will
+                appear here.
               </p>
             </div>
           ) : (
@@ -193,6 +159,39 @@ export function GalleryPage() {
               ))}
             </div>
           )}
+
+          <div className="mt-12 p-8 bg-[#FFFFFF] border border-[#E6DFD3] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.16em] text-[#8D6A26] font-medium">
+                Campus Visits
+              </p>
+              <h2 className="font-serif text-2xl font-semibold text-[#0F213E]">
+                Would you like to visit Beccan School in person?
+              </h2>
+              <p className="text-sm text-[#4A5568] max-w-xl">
+                Chat with our Dodowa school office on WhatsApp to arrange a tour
+                or ask about admissions.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <a
+                href={buildWhatsAppUrl(WHATSAPP_MESSAGES.campusVisit)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#128C7E] text-[#FFFFFF] text-sm font-semibold hover:bg-[#0E7367] transition-colors whitespace-nowrap"
+              >
+                <WhatsAppIcon className="w-4 h-4" />
+                <span>Arrange Visit on WhatsApp</span>
+              </a>
+              <Link
+                to="/admissions"
+                className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-[#D4C8B4] text-[#0F213E] text-sm font-medium hover:border-[#0F213E] transition-colors whitespace-nowrap"
+              >
+                <span>Admissions</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 

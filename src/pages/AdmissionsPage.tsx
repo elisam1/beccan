@@ -1,16 +1,18 @@
 import { ChevronDown, Mail, Phone } from 'lucide-react';
 import { useState } from 'react';
 import { SectionHeading } from '../components/common/SectionHeading';
+import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { AdmissionEnquiryForm } from '../components/forms/AdmissionEnquiryForm';
 import { PageBanner } from '../components/layout/PageBanner';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { schoolRepository } from '../services/schoolRepository';
+import { buildWhatsAppUrl, WHATSAPP_MESSAGES } from '../utils/whatsapp';
 
 export function AdmissionsPage() {
   useDocumentMeta({
     title: 'Admissions',
     description:
-      'Apply or submit an admission enquiry for Beccan School in Dodowa, Greater Accra Region. Review the admission process, requirements, and parent FAQs.',
+      'Apply or submit an admission enquiry for Beccan School in Dodowa, Greater Accra Region via WhatsApp. Review the admission process, requirements, and parent FAQs.',
   });
 
   const profile = schoolRepository.getProfile();
@@ -19,12 +21,14 @@ export function AdmissionsPage() {
   const faqs = schoolRepository.getAdmissionFaqs();
   const [openFaqId, setOpenFaqId] = useState<string | null>(faqs[0]?.id ?? null);
 
+  const admissionsWhatsappUrl = buildWhatsAppUrl(WHATSAPP_MESSAGES.admissions);
+
   return (
     <div>
       <PageBanner
         kicker="Admissions"
         title="Welcoming new learners to the Beccan School family."
-        subtitle="Begin your child’s admission enquiry online or speak directly with our school office in Dodowa to arrange a campus visit."
+        subtitle="Begin your child’s admission enquiry online via WhatsApp or speak directly with our school office in Dodowa to arrange a campus visit."
         currentPageLabel="Admissions"
       />
 
@@ -64,9 +68,9 @@ export function AdmissionsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-start">
             <div className="lg:col-span-7">
               <SectionHeading
-                kicker="Online Enquiry"
+                kicker="Online Application"
                 title="Admission Enquiry Form"
-                subtitle="Structured around Beccan School’s admission fields with client-side validation."
+                subtitle="Complete your child’s information below to send an admission enquiry directly to Beccan School on WhatsApp."
                 className="mb-8"
               />
               <AdmissionEnquiryForm />
@@ -105,20 +109,29 @@ export function AdmissionsPage() {
                   Speak with Beccan School
                 </h3>
                 <p className="text-sm text-[#D4DCE8] leading-relaxed">
-                  For current term fee schedules, class vacancy confirmation,
-                  and campus tour bookings, please contact the office directly.
+                  For current term fee schedules, class vacancy checks, and
+                  campus tour bookings, reach our admissions team directly.
                 </p>
-                <div className="pt-2 space-y-2.5 text-sm">
+                <div className="pt-1 space-y-3 text-sm">
+                  <a
+                    href={admissionsWhatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#15803D] text-[#FFFFFF] font-semibold hover:bg-[#166534] transition-colors"
+                  >
+                    <WhatsAppIcon className="w-4 h-4 shrink-0" />
+                    <span>Enquire on WhatsApp ({profile.contact.whatsappDisplay})</span>
+                  </a>
                   <a
                     href={profile.contact.telephoneHref}
-                    className="min-h-[44px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors tabular-nums"
+                    className="min-h-[40px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors tabular-nums"
                   >
                     <Phone className="w-4 h-4 text-[#D4B46E]" />
                     <span>{profile.contact.telephoneDisplay}</span>
                   </a>
                   <a
                     href={`mailto:${profile.contact.email}`}
-                    className="min-h-[44px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors"
+                    className="min-h-[40px] flex items-center gap-2.5 text-[#FBF9F5] hover:text-[#D4B46E] transition-colors"
                   >
                     <Mail className="w-4 h-4 text-[#D4B46E]" />
                     <span>{profile.contact.email}</span>
@@ -136,7 +149,7 @@ export function AdmissionsPage() {
           <SectionHeading
             kicker="Parent Questions"
             title="Frequently Asked Questions"
-            subtitle="Clear answers separating verified school information from details confirmed directly by administration."
+            subtitle="Helpful answers for prospective parents and families in Dodowa."
           />
 
           <div className="mt-10 max-w-3xl divide-y divide-[#E6DFD3] border-y border-[#E6DFD3] bg-[#FFFFFF]">

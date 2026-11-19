@@ -3,7 +3,7 @@ import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, cmsApi } from '../../services/cmsApi';
 import { SessionState } from '../../types/cms';
-import { SchoolCrest } from '../common/SchoolCrest';
+import { SchoolWordmark } from '../common/SchoolWordmark';
 
 interface AdminAuthScreenProps {
   session: SessionState | null;
@@ -62,11 +62,8 @@ export function AdminAuthScreen({
     <div className="min-h-screen bg-[#0F213E] flex flex-col justify-center px-4 py-12">
       <div className="w-full max-w-md mx-auto">
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center justify-center gap-3 mb-3">
-            <SchoolCrest variant="gold" className="w-10 h-10" />
-            <span className="font-serif text-3xl font-semibold text-[#FBF9F5]">
-              Beccan School
-            </span>
+          <div className="inline-flex items-center justify-center mb-3">
+            <SchoolWordmark variant="light" size="lg" className="items-center" />
           </div>
           <p className="text-xs uppercase tracking-[0.2em] text-[#D4B46E]">
             Administration Portal · Dodowa

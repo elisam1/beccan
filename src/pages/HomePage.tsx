@@ -12,11 +12,13 @@ import { FacilityCard } from '../components/cards/FacilityCard';
 import { NewsCard } from '../components/cards/NewsCard';
 import { SchoolImage } from '../components/common/SchoolImage';
 import { SectionHeading } from '../components/common/SectionHeading';
+import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { cmsApi } from '../services/cmsApi';
 import { schoolRepository } from '../services/schoolRepository';
 import { CmsAnnouncement, CmsEvent, CmsNewsArticle } from '../types/cms';
 import { formatDisplayDate, formatTimeRange } from '../utils/formatting';
+import { buildWhatsAppUrl, WHATSAPP_MESSAGES } from '../utils/whatsapp';
 
 export function HomePage() {
   useDocumentMeta({
@@ -33,6 +35,9 @@ export function HomePage() {
   const [latestNews, setLatestNews] = useState<CmsNewsArticle[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<CmsEvent[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(true);
+
+  const generalWhatsappUrl = buildWhatsAppUrl(WHATSAPP_MESSAGES.general);
+  const admissionsWhatsappUrl = buildWhatsAppUrl(WHATSAPP_MESSAGES.admissions);
 
   useEffect(() => {
     let active = true;
@@ -79,7 +84,7 @@ export function HomePage() {
                 formation.
               </p>
 
-              <div className="mt-8 flex flex-wrap items-center gap-4">
+              <div className="mt-8 flex flex-wrap items-center gap-3.5">
                 <Link
                   to="/admissions"
                   className="min-h-[44px] inline-flex items-center gap-2 px-6 py-3 bg-[#B58E43] text-[#0A1629] text-sm font-semibold tracking-wide hover:bg-[#D4B46E] transition-colors whitespace-nowrap shrink-0"
@@ -87,6 +92,15 @@ export function HomePage() {
                   <span>Apply for Admission</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
+                <a
+                  href={generalWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-h-[44px] inline-flex items-center gap-2 px-5 py-3 bg-[#15803D] text-[#FFFFFF] text-sm font-semibold hover:bg-[#166534] transition-colors whitespace-nowrap shrink-0"
+                >
+                  <WhatsAppIcon className="w-4 h-4 shrink-0" />
+                  <span>Chat on WhatsApp</span>
+                </a>
                 <Link
                   to="/about"
                   className="min-h-[44px] inline-flex items-center gap-2 px-5 py-3 border border-[#324D7A] text-[#FBF9F5] text-sm font-medium hover:border-[#D4B46E] hover:text-[#D4B46E] transition-colors whitespace-nowrap shrink-0"
@@ -102,7 +116,6 @@ export function HomePage() {
                   src={campusPhoto.src}
                   alt={campusPhoto.alt}
                   title="Beccan School Campus, Dodowa"
-                  verificationStatus="verified"
                   aspectRatioClass="aspect-[4/3] lg:aspect-auto lg:h-full"
                 />
               </div>
@@ -139,14 +152,17 @@ export function HomePage() {
             </div>
             <div>
               <dt className="text-xs uppercase tracking-[0.16em] text-[#8D6A26] font-medium">
-                Admissions Office
+                WhatsApp & Admissions Desk
               </dt>
               <dd className="mt-1 text-sm font-medium text-[#141B29] tabular-nums">
                 <a
-                  href={profile.contact.telephoneHref}
-                  className="hover:text-[#0F213E] underline underline-offset-4 decoration-[#D4C8B4]"
+                  href={generalWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[#15803D] hover:text-[#166534] underline underline-offset-4"
                 >
-                  {profile.contact.telephoneDisplay}
+                  <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{profile.contact.whatsappDisplay}</span>
                 </a>
               </dd>
             </div>
@@ -222,15 +238,22 @@ export function HomePage() {
                 kicker="Welcome to Beccan School"
                 title="A supportive community grounded in values and curiosity."
               />
-              <div className="mt-6 pt-6 border-t border-[#E6DFD3]">
-                <p className="text-xs uppercase tracking-[0.16em] text-[#8D6A26] font-medium mb-2">
-                  Registry Context
+              <div className="mt-6 pt-6 border-t border-[#E6DFD3] space-y-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-[#8D6A26] font-medium">
+                  Dodowa Learning Community
                 </p>
                 <p className="text-sm text-[#4A5568] leading-relaxed">
-                  {profile.registryClassification}. Exact grade streams and
-                  academic calendar details are confirmed directly with school
-                  administration.
+                  {profile.registryClassification}.
                 </p>
+                <a
+                  href={generalWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-[#15803D] hover:text-[#166534] transition-colors"
+                >
+                  <WhatsAppIcon className="w-4 h-4 shrink-0" />
+                  <span>Speak with our school office on WhatsApp</span>
+                </a>
               </div>
             </div>
 
@@ -267,7 +290,7 @@ export function HomePage() {
           <SectionHeading
             kicker="Our Guiding Purpose"
             title="Vision & Mission"
-            subtitle="Preserved from Beccan School’s official statements—uniting academic rigour, integrity, and community partnership."
+            subtitle="Guiding principles uniting academic standards, integrity, and community partnership."
             theme="dark"
           />
 
@@ -299,14 +322,14 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* Verified Academic Highlights */}
+      {/* Academic Highlights */}
       <section className="py-16 sm:py-22 bg-[#FFFFFF] border-b border-[#E6DFD3]">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
             <SectionHeading
               kicker="Academic Direction"
               title="Balanced learning for the whole child."
-              subtitle="Grounded in Beccan School’s official academic focus. Specific subject syllabi and term calendars are being confirmed with school leadership."
+              subtitle="A structured basic education programme uniting core sciences, arts, technology awareness, and personal discipline."
             />
             <Link
               to="/academics"
@@ -367,7 +390,7 @@ export function HomePage() {
             <SectionHeading
               kicker="Campus & Facilities"
               title="Inside our Dodowa campus."
-              subtitle="Verified observations from Beccan School’s campus photography alongside structured slots prepared for additional verified images."
+              subtitle="Explore our learning buildings, enclosed compound, and outdoor courtyard recreation space."
             />
             <div className="flex flex-wrap items-center gap-5 shrink-0">
               <Link
@@ -402,8 +425,8 @@ export function HomePage() {
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
               <SectionHeading
                 kicker="News & Events"
-                title="Published school news & upcoming events."
-                subtitle="Published directly by Beccan School administration."
+                title="School news & upcoming events."
+                subtitle="Latest stories, announcements, and key term dates at Beccan School."
               />
               <Link
                 to="/news"
@@ -429,8 +452,8 @@ export function HomePage() {
                   No news articles published yet
                 </p>
                 <p className="mt-2 text-sm text-[#5B6472]">
-                  Official school updates will appear here once published by
-                  administration.
+                  Official school updates and announcements will appear here as
+                  they are shared by administration.
                 </p>
               </div>
             ) : (
@@ -486,11 +509,11 @@ export function HomePage() {
                 Considering Beccan School for your child?
               </h2>
               <p className="text-sm sm:text-base text-[#D4DCE8] leading-relaxed max-w-xl">
-                Submit an online admission enquiry to begin the conversation, or
-                reach our Dodowa campus office directly to schedule a visit and
-                confirm class availability.
+                Complete our admission form to send your child’s application
+                directly on WhatsApp, or message our Dodowa office to schedule a
+                campus visit.
               </p>
-              <div className="pt-2 flex flex-wrap gap-4">
+              <div className="pt-2 flex flex-wrap gap-3.5">
                 <Link
                   to="/admissions"
                   className="min-h-[44px] inline-flex items-center gap-2 px-6 py-3 bg-[#B58E43] text-[#0A1629] text-sm font-semibold hover:bg-[#D4B46E] transition-colors"
@@ -498,6 +521,15 @@ export function HomePage() {
                   <span>Start Admission Enquiry</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
+                <a
+                  href={admissionsWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-h-[44px] inline-flex items-center gap-2 px-5 py-3 bg-[#15803D] text-[#FFFFFF] text-sm font-semibold hover:bg-[#166534] transition-colors"
+                >
+                  <WhatsAppIcon className="w-4 h-4 shrink-0" />
+                  <span>Enquire on WhatsApp</span>
+                </a>
                 <Link
                   to="/contact"
                   className="min-h-[44px] inline-flex items-center gap-2 px-5 py-3 border border-[#324D7A] text-[#FBF9F5] text-sm font-medium hover:border-[#D4B46E] transition-colors"
@@ -518,6 +550,17 @@ export function HomePage() {
                     {profile.contact.district} · {profile.contact.region}
                   </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-3 tabular-nums">
+                <WhatsAppIcon className="w-5 h-5 text-[#4ADE80] shrink-0" />
+                <a
+                  href={generalWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#FBF9F5] hover:text-[#4ADE80] transition-colors font-medium"
+                >
+                  WhatsApp: {profile.contact.whatsappDisplay}
+                </a>
               </div>
               <div className="flex items-center gap-3 tabular-nums">
                 <Phone className="w-5 h-5 text-[#D4B46E] shrink-0" />

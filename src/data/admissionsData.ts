@@ -5,7 +5,7 @@ export const admissionSteps: AdmissionStep[] = [
     stepNumber: '01',
     title: 'Submit an Admission Enquiry',
     description:
-      'Complete the online admission enquiry form below with your child’s details and preferred class level, or contact the school office directly by phone on 024-740-1641.',
+      'Complete the admission enquiry form below to send your child’s details directly to the school office via WhatsApp, or call 024-740-1641.',
   },
   {
     stepNumber: '02',
@@ -17,62 +17,58 @@ export const admissionSteps: AdmissionStep[] = [
     stepNumber: '03',
     title: 'Readiness Review & Document Check',
     description:
-      'Provide standard learner records requested by administration (such as birth certificate copy, immunisation card where applicable, and previous school report for transfers).',
+      'Provide standard learner records requested by administration, such as a birth certificate copy, immunisation card where applicable, and previous school report for transfers.',
   },
   {
     stepNumber: '04',
     title: 'Enrolment Confirmation',
     description:
-      'Receive official placement confirmation, term fee schedule, uniform guidance, and orientation dates directly from the Beccan School administration.',
+      'Receive placement confirmation, term fee schedule, uniform guidance, and orientation dates directly from Beccan School administration.',
   },
 ];
 
 export const admissionRequirements: { item: string; note: string }[] = [
   {
-    item: 'Completed Admission Enquiry / Application Form',
-    note: 'Capturing learner full name, date of birth, gender, target class, and parent/guardian contact details (aligned with existing admission.html fields).',
+    item: 'Completed Admission Enquiry',
+    note: 'Learner full name, date of birth, gender, target class, and parent or guardian contact details submitted via our WhatsApp-assisted form.',
   },
   {
-    item: 'Learner Identity & Age Verification',
-    note: 'Specific required documents (e.g., Ghana Card / Birth Certificate / Health Weighing Card for early years) to be confirmed with the school office.',
+    item: 'Learner Identity & Age Record',
+    note: 'A copy of the learner’s birth certificate and health/immunisation record where applicable for early years placements.',
   },
   {
     item: 'Previous Academic Records (Transfer Pupils)',
-    note: 'Most recent school report card or transfer record, where applicable—requirements confirmed during consultation.',
+    note: 'Most recent school report card or transfer record for learners joining from another school.',
   },
   {
-    item: 'Fee Schedule & Uniform Details',
-    note: 'Official tuition, feeding/transport options (if offered), and uniform requirements are issued strictly by school administration upon enquiry.',
+    item: 'Fee Schedule & Uniform Guidance',
+    note: 'Current term fee details and uniform requirements are provided directly by the school office upon enquiry.',
   },
 ];
 
 export const admissionFaqs: AdmissionFaq[] = [
   {
     id: 'faq-classes',
-    question: 'Which class levels are currently open for admission?',
+    question: 'Which class levels are open for admission?',
     answer:
-      'Ghana’s national school directory lists Beccan School as a Basic School in the Shai-Osudoku District. Please contact 024-740-1641 or submit an enquiry to confirm exact vacancies across Early Years, Primary, and Junior High streams for the current term.',
-    requiresConfirmation: true,
+      'Beccan School serves learners across basic education in Dodowa. Message us on WhatsApp or call 024-740-1641 to check current vacancies and term openings for your child’s class level.',
   },
   {
     id: 'faq-fees',
-    question: 'Are school fees published on the website?',
+    question: 'How can parents obtain the school fee schedule?',
     answer:
-      'Official fee schedules are not published publicly online until verified for the active academic year by school management. Prospective parents receive the current term fee breakdown directly from the admissions office.',
-    requiresConfirmation: true,
+      'Current term fee schedules and payment details are shared directly by the admissions office when you reach out on WhatsApp or visit the campus in Dodowa.',
   },
   {
     id: 'faq-visit',
     question: 'Can parents visit the Dodowa campus before applying?',
     answer:
-      'Yes—parents and guardians are warmly encouraged to call 024-740-1641 or email info@beccanschool.com to schedule an in-person campus visit and speak with school leadership.',
-    requiresConfirmation: false,
+      'Yes—parents and guardians are warmly encouraged to message us on WhatsApp, call 024-740-1641, or email info@beccanschool.com to schedule an in-person campus visit.',
   },
   {
     id: 'faq-form',
-    question: 'Does submitting the online form immediately enrol my child?',
+    question: 'How does the online admission form work?',
     answer:
-      'In this demonstration redesign, submitting the form validates your details and prepares an enquiry summary for review. Once connected to the school’s live intake system, administration will follow up directly to complete placement.',
-    requiresConfirmation: false,
+      'Submitting the form validates your child’s details and opens a pre-filled admission enquiry in WhatsApp addressed to Beccan School (024-740-1641). Review the message and press Send in WhatsApp so our admissions office can assist you with the next steps.',
   },
 ];

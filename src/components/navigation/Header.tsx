@@ -1,8 +1,9 @@
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { schoolRepository } from '../../services/schoolRepository';
-import { SchoolCrest } from '../common/SchoolCrest';
+import { buildWhatsAppUrl, WHATSAPP_MESSAGES } from '../../utils/whatsapp';
+import { SchoolWordmark } from '../common/SchoolWordmark';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { MobileDrawer } from './MobileDrawer';
 
 const desktopNavLinks = [
@@ -16,7 +17,7 @@ const desktopNavLinks = [
 
 export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const profile = schoolRepository.getProfile();
+  const whatsappHref = buildWhatsAppUrl(WHATSAPP_MESSAGES.general);
 
   return (
     <>
@@ -28,19 +29,17 @@ export function Header() {
       </a>
 
       <header className="sticky top-0 z-40 bg-[#FBF9F5]/95 backdrop-blur-sm border-b border-[#E6DFD3]">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 h-16 lg:h-20 flex items-center justify-between gap-8">
-          {/* Zone 1: Single-line brand wordmark */}
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 h-16 lg:h-20 flex items-center justify-between gap-6">
+          {/* Zone 1: Clean typographic BECCAN SCHOOL wordmark */}
           <Link
             to="/"
-            className="inline-flex items-center gap-2.5 whitespace-nowrap shrink-0 group"
+            className="inline-flex items-center whitespace-nowrap shrink-0 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B58E43]"
+            aria-label="Beccan School home"
           >
-            <SchoolCrest className="w-8 h-8 shrink-0" />
-            <span className="font-serif text-xl sm:text-2xl font-semibold tracking-tight text-[#0F213E] group-hover:text-[#172E54] transition-colors">
-              {profile.name}
-            </span>
+            <SchoolWordmark variant="navy" size="md" />
           </Link>
 
-          {/* Zone 2: Concise single-line navigation links */}
+          {/* Zone 2: Single-line navigation links */}
           <nav
             className="hidden lg:flex items-center gap-6 xl:gap-7"
             aria-label="Primary navigation"
@@ -62,8 +61,19 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Zone 3: Single primary action + mobile menu trigger */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Zone 3: WhatsApp contact + Admissions CTA + mobile menu trigger */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden md:inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-[#15803D] text-[#15803D] bg-[#FFFFFF] hover:bg-[#15803D] hover:text-[#FFFFFF] text-sm font-medium transition-colors duration-150 whitespace-nowrap shrink-0"
+              aria-label="Chat with Beccan School on WhatsApp"
+            >
+              <WhatsAppIcon className="w-4 h-4 shrink-0" />
+              <span>WhatsApp</span>
+            </a>
+
             <Link
               to="/admissions"
               className="hidden sm:inline-flex items-center justify-center px-5 py-2.5 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium tracking-wide hover:bg-[#172E54] transition-colors duration-150 whitespace-nowrap shrink-0"
@@ -74,7 +84,7 @@ export function Header() {
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
-              className="lg:hidden min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-[#0F213E] border border-[#E6DFD3] bg-[#FFFFFF] hover:bg-[#F4EFE6] transition-colors"
+              className="lg:hidden min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-[#0F213E] border border-[#E6DFD3] bg-[#FFFFFF] hover:bg-[#F4EFE6] transition-colors cursor-pointer"
               aria-label="Open navigation menu"
               aria-expanded={mobileOpen}
             >

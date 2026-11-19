@@ -6,30 +6,21 @@ interface FacilityCardProps {
 }
 
 export function FacilityCard({ facility }: FacilityCardProps) {
-  const statusText =
-    facility.verificationStatus === 'verified'
-      ? 'Verified from school source'
-      : 'Details pending confirmation';
-
   return (
     <article className="bg-[#FFFFFF] border border-[#E6DFD3] flex flex-col">
-      <SchoolImage
-        src={facility.imageUrl}
-        alt={facility.imageAlt || `${facility.title} at Beccan School, Dodowa`}
-        title={facility.title}
-        verificationStatus={facility.verificationStatus}
-        placeholderLabel="Awaiting Facility Photography"
-        aspectRatioClass="aspect-[16/10]"
-      />
+      {facility.imageUrl && (
+        <SchoolImage
+          src={facility.imageUrl}
+          alt={facility.imageAlt || `${facility.title} at Beccan School, Dodowa`}
+          title={facility.title}
+          aspectRatioClass="aspect-[16/10]"
+        />
+      )}
 
       <div className="p-6 sm:p-7 flex-1 flex flex-col">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[#5B6472] mb-2.5">
-          <span className="uppercase tracking-[0.14em] text-[#8D6A26] font-medium">
-            {facility.category}
-          </span>
-          <span aria-hidden="true">·</span>
-          <span>{statusText}</span>
-        </div>
+        <p className="text-xs uppercase tracking-[0.14em] text-[#8D6A26] font-medium mb-2.5">
+          {facility.category}
+        </p>
 
         <h3 className="font-serif text-2xl font-semibold text-[#0F213E] leading-snug">
           {facility.title}
@@ -50,12 +41,6 @@ export function FacilityCard({ facility }: FacilityCardProps) {
             </li>
           ))}
         </ul>
-
-        {facility.imageSourceNote && (
-          <p className="mt-4 text-xs text-[#5B6472] italic">
-            {facility.imageSourceNote}
-          </p>
-        )}
       </div>
     </article>
   );

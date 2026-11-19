@@ -6,8 +6,6 @@ export const schoolProfile: SchoolProfile = {
   shortName: 'Beccan',
   motto: 'Excellence • Discipline • Success',
   mottoParts: ['Excellence', 'Discipline', 'Success'],
-  establishedNote:
-    'Founding year and formal historical timeline are pending confirmation from Beccan School management.',
   registryClassification:
     'Private Basic School · Shai-Osudoku District (Dodowa), Greater Accra Region, Ghana',
   welcomeHeadline: 'Building a legacy of excellence in the heart of Dodowa.',
@@ -28,8 +26,6 @@ export const schoolProfile: SchoolProfile = {
       'With knowledge, strength, and unity,',
       'We rise to make our dreams come true.',
     ],
-    sourceNote:
-      'Lyrics preserved verbatim from the official school website (beccanschool.site). Any additional verses or audio recordings are pending confirmation from school leadership.',
   },
   coreValues: [
     {
@@ -37,50 +33,28 @@ export const schoolProfile: SchoolProfile = {
       title: 'Excellence',
       summary:
         'A commitment to high academic expectations, diligent study habits, and continuous personal improvement across every stage of basic education.',
-      sourceBasis: 'School Motto & Mission Statement (beccanschool.site)',
     },
     {
       id: 'discipline',
       title: 'Discipline',
       summary:
         'Cultivating self-respect, responsibility, strong work ethic, and respectful conduct within a safe and orderly school community.',
-      sourceBasis: 'School Motto & Mission Statement (beccanschool.site)',
     },
     {
       id: 'integrity',
       title: 'Integrity & Unity',
       summary:
         'Nurturing honest, compassionate citizens who stand together with strength, respect diversity, and contribute positively to society.',
-      sourceBasis: 'School Vision, Mission & Anthem (beccanschool.site)',
     },
     {
       id: 'success',
       title: 'Purposeful Success',
       summary:
         'Preparing learners intellectually, socially, and physically to bridge classroom knowledge with real-world readiness.',
-      sourceBasis: 'School Motto & Mission Statement (beccanschool.site)',
-    },
-  ],
-  leadership: [
-    {
-      role: 'Proprietor / School Management',
-      occupantStatus: 'Name & biography pending official confirmation from school administration',
-      messageTitle: 'Leadership Profile Awaiting Confirmation',
-      messageBody:
-        'Official names, photographs, and biographical profiles of Beccan School’s Proprietor and senior leadership team will be published here once formally verified and approved by school management.',
-      verificationStatus: 'pending-confirmation',
-    },
-    {
-      role: 'Headteacher',
-      occupantStatus: 'Name & official welcome letter pending confirmation from school administration',
-      messageTitle: "Headteacher's Welcome Message",
-      messageBody:
-        'A dedicated welcome address from the Headteacher—detailing term priorities, pastoral care, and academic expectations for Dodowa families—is scheduled for publication upon management verification.',
-      verificationStatus: 'pending-confirmation',
     },
   ],
   historyNote:
-    'Beccan School serves families in Dodowa within the Shai-Osudoku District of the Greater Accra Region and is listed in Ghana’s Ministry of Education basic school register. To uphold strict factual accuracy, our founding date, milestone timeline, and enrolment figures are withheld pending direct verification from school management.',
+    'Beccan School serves families in Dodowa within the Shai-Osudoku District of the Greater Accra Region, Ghana, offering basic education grounded in academic standards, discipline, and personal integrity.',
   contact: {
     campusLabel: 'Beccan School Campus, Dodowa',
     town: 'Dodowa',
@@ -88,13 +62,13 @@ export const schoolProfile: SchoolProfile = {
     region: 'Greater Accra Region',
     country: 'Ghana',
     streetAddressNote:
-      'Exact street address, GhanaPost GPS digital address, and verified map coordinates are pending confirmation from school management.',
+      'Located in Dodowa, Shai-Osudoku District. Message us on WhatsApp or call for campus landmarks and directions.',
     telephoneDisplay: '024-740-1641',
     telephoneHref: 'tel:+233247401641',
+    whatsappNumber: '233247401641',
+    whatsappDisplay: '024-740-1641',
     email: 'info@beccanschool.com',
     officeHoursNote:
-      'Please call or email ahead to confirm school office visiting hours and campus tour availability.',
-    mapVerificationNote:
-      'Interactive street-level pin is withheld until Beccan School provides its verified GhanaPost GPS code or exact campus coordinates.',
+      'Message us on WhatsApp or call ahead to confirm school office hours and arrange a campus visit.',
   },
 };
