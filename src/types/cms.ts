@@ -17,6 +17,8 @@ export type CmsNewsCategory =
 
 export type AnnouncementPriority = 'Normal' | 'Important' | 'Urgent';
 
+export type CmsCollectionName = 'gallery' | 'news' | 'announcements' | 'events';
+
 export interface SessionState {
   authenticated: boolean;
   username: string | null;
@@ -87,6 +89,52 @@ export interface CmsEvent {
   isUpcoming?: boolean;
 }
 
+export interface CategoryStorageMetrics {
+  originalsCount: number;
+  thumbnailsCount: number;
+  originalsBytes: number;
+  thumbnailsBytes: number;
+  totalBytes: number;
+  publishedCount?: number;
+  draftCount?: number;
+}
+
+export interface MediaStorageSummary {
+  totalBytes: number;
+  totalOriginalsCount: number;
+  totalThumbnailsCount: number;
+  backupsBytes: number;
+  gallery: CategoryStorageMetrics;
+  news: CategoryStorageMetrics;
+  events: CategoryStorageMetrics;
+  configuredLimitBytes: number | null;
+  storageWarningPercent: number;
+  remainingBytes: number | null;
+  usagePercent: number | null;
+  approachingLimit: boolean;
+  overLimit: boolean;
+}
+
+export interface PhpUploadEnvironment {
+  uploadMaxFilesize: string;
+  uploadMaxFilesizeBytes: number;
+  postMaxSize: string;
+  postMaxSizeBytes: number;
+  maxFileUploads: number;
+  memoryLimit: string;
+  memoryLimitBytes: number;
+  gdLoaded: boolean;
+  fileinfoLoaded: boolean;
+  exifLoaded: boolean;
+  zipLoaded: boolean;
+}
+
+export interface CmsSettings {
+  storageLimitBytes: number | null;
+  storageWarningPercent: number;
+  backupRetentionCount: number;
+}
+
 export interface AdminOverviewData {
   counts: {
     publishedPhotos: number;
@@ -100,6 +148,8 @@ export interface AdminOverviewData {
     pastEvents: number;
     backupCount: number;
   };
+  storage: MediaStorageSummary;
+  phpEnvironment: PhpUploadEnvironment;
   recentActivity: {
     type: 'gallery' | 'news' | 'announcement' | 'event';
     id: string;
@@ -111,7 +161,27 @@ export interface AdminOverviewData {
 
 export interface BackupFileInfo {
   filename: string;
-  collection: 'gallery' | 'news' | 'announcements' | 'events';
+  collection: CmsCollectionName;
   createdAt: string;
+  kind: 'complete-snapshot' | 'json-records' | 'legacy-json-only';
+  includesMedia: boolean;
+  recordCount: number;
+  mediaFilesCount: number;
+  jsonBytes: number;
+  mediaBytes: number;
   sizeBytes: number;
+}
+
+export interface BackupCapabilities {
+  zipArchiveSupported: boolean;
+  retentionCount: number;
+  archiveUnavailableReason: string | null;
+}
+
+export interface RestoreBackupResult {
+  collection: string;
+  restoredFrom: string;
+  recordCount: number;
+  restoredMediaFiles: number;
+  safetyBackupId: string | null;
 }

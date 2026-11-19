@@ -16,21 +16,33 @@ if ($arg === '' || $arg === '--list') {
         fwrite(STDOUT, "No backups found in private/backups/.\n");
         exit(0);
     }
-    fwrite(STDOUT, "Available JSON backups:\n");
+    fwrite(STDOUT, "Available backups:\n");
     foreach ($backups as $b) {
-        fwrite(STDOUT, sprintf("  - %s (%s, %s, %d bytes)\n", $b['filename'], $b['collection'], $b['createdAt'], $b['sizeBytes']));
+        $typeLabel = $b['includesMedia'] ? 'JSON + Media' : 'JSON only';
+        fwrite(STDOUT, sprintf(
+            "  - %s (%s, %s, %d records, %d media files, %d bytes, %s)\n",
+            $b['filename'],
+            $b['collection'],
+            $typeLabel,
+            $b['recordCount'],
+            $b['mediaFilesCount'],
+            $b['sizeBytes'],
+            $b['createdAt']
+        ));
     }
-    fwrite(STDOUT, "\nTo restore: php private/cli/restore-backup.php <filename>\n");
+    fwrite(STDOUT, "\nTo restore: php private/cli/restore-backup.php <snapshot_id>\n");
     exit(0);
 }
 
 try {
     $res = restore_collection_backup($arg);
     fwrite(STDOUT, sprintf(
-        "Restored collection '%s' from '%s' (%d records).\n",
+        "Restored collection '%s' from '%s' (%d records, %d media files verified).\nSafety snapshot of previous state: %s\n",
         $res['collection'],
         $res['restoredFrom'],
-        $res['recordCount']
+        $res['recordCount'],
+        $res['restoredMediaFiles'] ?? 0,
+        $res['safetyBackupId'] ?? 'none'
     ));
 } catch (Throwable $e) {
     fwrite(STDERR, 'Restore failed: ' . $e->getMessage() . PHP_EOL);

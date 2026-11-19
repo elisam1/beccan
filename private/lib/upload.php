@@ -13,6 +13,102 @@ const BECCAN_ALLOWED_IMAGE_MIMES = [
     'image/webp' => 'webp',
 ];
 
+function build_media_serve_url(string $bucket, string $recordId, string $variant = 'original'): string
+{
+    $v = $variant === 'thumb' ? 'thumb' : 'original';
+    return sprintf(
+        '/api/media/serve.php?category=%s&id=%s&variant=%s',
+        rawurlencode($bucket),
+        rawurlencode($recordId),
+        $v
+    );
+}
+
+function is_valid_media_filename(?string $filename): bool
+{
+    return is_string($filename) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', $filename) === 1;
+}
+
+function extract_record_media_filename(array $record, string $bucket): ?string
+{
+    $explicit = $record['mediaFilename'] ?? null;
+    if (is_valid_media_filename($explicit)) {
+        return $explicit;
+    }
+
+    foreach (['imageUrl', 'coverImageUrl', 'thumbnailUrl', 'coverThumbnailUrl'] as $key) {
+        $val = $record[$key] ?? null;
+        if (!is_string($val)) {
+            continue;
+        }
+        $pattern = '#^/uploads/' . preg_quote($bucket, '#') . '/(?:thumbs/)?([a-f0-9]{32}\.(?:jpg|png|webp))$#';
+        if (preg_match($pattern, $val, $m) === 1) {
+            return $m[1];
+        }
+    }
+
+    return null;
+}
+
+function resolve_private_media_path(string $bucket, string $filename, string $variant = 'original'): ?string
+{
+    if (!in_array($bucket, BECCAN_ALLOWED_MEDIA_CATEGORIES, true)) {
+        return null;
+    }
+    if (!in_array($variant, ['original', 'thumb'], true)) {
+        return null;
+    }
+    if (!is_valid_media_filename($filename)) {
+        return null;
+    }
+    $sub = $variant === 'thumb' ? '/thumbs/' : '/';
+    return BECCAN_MEDIA_DIR . '/' . $bucket . $sub . $filename;
+}
+
+function validate_multipart_request_or_fail(): void
+{
+    if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+        return;
+    }
+    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
+
+    if ($contentLength > 0 && empty($_POST) && empty($_FILES)) {
+        $postMaxRaw = (string) (ini_get('post_max_size') ?: '8M');
+        $postMaxBytes = parse_php_size_bytes($postMaxRaw);
+        if ($postMaxBytes > 0 && $contentLength > $postMaxBytes) {
+            json_error(
+                "Upload exceeds the server's maximum request size ({$postMaxRaw}). Upload fewer photographs at once or ask your host to raise post_max_size.",
+                413,
+                ['postMaxSize' => $postMaxRaw, 'contentLength' => $contentLength]
+            );
+        }
+        if (str_contains($contentType, 'multipart/form-data')) {
+            json_error(
+                "Upload payload was discarded by the server (exceeded post_max_size {$postMaxRaw} or malformed multipart body).",
+                413,
+                ['postMaxSize' => $postMaxRaw]
+            );
+        }
+    }
+}
+
+function require_upload_extensions_or_fail(): void
+{
+    if (!extension_loaded('fileinfo') || !class_exists('finfo')) {
+        json_error(
+            'Image uploads are disabled because the PHP Fileinfo extension is unavailable on this server.',
+            503
+        );
+    }
+    if (!extension_loaded('gd')) {
+        json_error(
+            'Image uploads are disabled because the PHP GD image processing extension is unavailable on this server.',
+            503
+        );
+    }
+}
+
 function normalize_uploaded_files_array(array $fileEntry): array
 {
     if (!isset($fileEntry['name'])) {
@@ -36,45 +132,90 @@ function normalize_uploaded_files_array(array $fileEntry): array
     return $normalized;
 }
 
-function process_uploaded_image(array $file, string $bucket): array
+function create_upload_staging_dir(): string
 {
-    if (!in_array($bucket, ['gallery', 'news', 'events'], true)) {
+    if (!is_dir(BECCAN_TMP_DIR)) {
+        @mkdir(BECCAN_TMP_DIR, 0750, true);
+    }
+    // Sweep orphaned staging dirs older than 2 hours
+    foreach (glob(BECCAN_TMP_DIR . '/stage_*') ?: [] as $oldDir) {
+        if (is_dir($oldDir) && (time() - (@filemtime($oldDir) ?: time())) > 7200) {
+            remove_directory_recursive($oldDir);
+        }
+    }
+
+    $dir = BECCAN_TMP_DIR . '/stage_' . bin2hex(random_bytes(8));
+    if (!mkdir($dir, 0750, true)) {
+        throw new RuntimeException('Unable to initialize private temporary upload staging directory.');
+    }
+    register_shutdown_function(static function () use ($dir): void {
+        if (is_dir($dir)) {
+            remove_directory_recursive($dir);
+        }
+    });
+    return $dir;
+}
+
+function remove_directory_recursive(string $dir): void
+{
+    if (!is_dir($dir)) {
+        return;
+    }
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($iterator as $item) {
+        if ($item->isDir()) {
+            @rmdir($item->getPathname());
+        } else {
+            @unlink($item->getPathname());
+        }
+    }
+    @rmdir($dir);
+}
+
+function stage_uploaded_image(array $file, string $bucket, string $stagingDir, ?string $labelPrefix = null): array
+{
+    if (!in_array($bucket, BECCAN_ALLOWED_MEDIA_CATEGORIES, true)) {
         throw new InvalidArgumentException('Invalid upload bucket.');
     }
 
+    require_upload_extensions_or_fail();
+
+    $prefix = $labelPrefix !== null ? ($labelPrefix . ': ') : '';
     $errorCode = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($errorCode !== UPLOAD_ERR_OK) {
+        $uploadMaxRaw = (string) (ini_get('upload_max_filesize') ?: 'unknown');
         $message = match ($errorCode) {
-            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Uploaded file exceeds allowed size limit.',
-            UPLOAD_ERR_NO_FILE => 'No file was uploaded.',
-            default => 'File upload failed. Please try again.',
+            UPLOAD_ERR_INI_SIZE => "{$prefix}File exceeds PHP upload_max_filesize limit ({$uploadMaxRaw}).",
+            UPLOAD_ERR_FORM_SIZE => "{$prefix}File exceeds form upload size limit.",
+            UPLOAD_ERR_PARTIAL => "{$prefix}File was only partially uploaded. Please retry.",
+            UPLOAD_ERR_NO_FILE => "{$prefix}No file was uploaded.",
+            default => "{$prefix}File upload failed (error code {$errorCode}).",
         };
         json_error($message, 422);
     }
 
     $tmpPath = (string) ($file['tmp_name'] ?? '');
-    if ($tmpPath === '' || (!is_uploaded_file($tmpPath) && PHP_SAPI !== 'cli')) {
-        json_error('Invalid uploaded file source.', 400);
+    if ($tmpPath === '' || (!is_uploaded_file($tmpPath) && PHP_SAPI !== 'cli') || !is_file($tmpPath)) {
+        json_error("{$prefix}Invalid uploaded file source.", 400);
     }
 
     $size = (int) ($file['size'] ?? filesize($tmpPath));
     if ($size <= 0 || $size > BECCAN_MAX_UPLOAD_BYTES) {
-        json_error('Image size must be between 1 byte and 6 MB.', 422);
+        json_error("{$prefix}Image size must be between 1 byte and 6 MB.", 422);
     }
 
-    // Validate actual MIME type using Fileinfo (never trust client extension or Content-Type)
-    if (!class_exists('finfo')) {
-        throw new RuntimeException('PHP Fileinfo extension is required for secure upload validation.');
-    }
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $detectedMime = (string) $finfo->file($tmpPath);
     if (!array_key_exists($detectedMime, BECCAN_ALLOWED_IMAGE_MIMES)) {
-        json_error('Unsupported file format. Only JPEG, PNG, and WebP photographs are permitted.', 422);
+        json_error("{$prefix}Unsupported file format. Only JPEG, PNG, and WebP photographs are permitted.", 422);
     }
 
     $imageInfo = @getimagesize($tmpPath);
     if ($imageInfo === false) {
-        json_error('Uploaded file is not a valid image.', 422);
+        json_error("{$prefix}Uploaded file is not a valid image.", 422);
     }
     [$width, $height] = $imageInfo;
     if (
@@ -83,68 +224,130 @@ function process_uploaded_image(array $file, string $bucket): array
         $width > BECCAN_MAX_IMAGE_DIM ||
         $height > BECCAN_MAX_IMAGE_DIM
     ) {
-        json_error('Image dimensions must be between 100×100 and 6000×6000 pixels.', 422);
+        json_error("{$prefix}Image dimensions must be between 100×100 and 6000×6000 pixels.", 422);
     }
 
-    $ext = BECCAN_ALLOWED_IMAGE_MIMES[$detectedMime];
-    $randomName = bin2hex(random_bytes(16)) . '.' . $ext;
-    $bucketDir = BECCAN_UPLOADS_DIR . '/' . $bucket;
-    $thumbDir = $bucketDir . '/thumbs';
-
-    if (!is_dir($thumbDir)) {
-        @mkdir($thumbDir, 0750, true);
-    }
-
-    $destPath = $bucketDir . '/' . $randomName;
-    $thumbPath = $thumbDir . '/' . $randomName;
-    $thumbGenerated = false;
-    $finalWidth = $width;
-    $finalHeight = $height;
-
-    if (extension_loaded('gd')) {
-        [$savedMain, $finalWidth, $finalHeight] = optimize_and_save_gd(
-            $tmpPath,
-            $destPath,
-            $detectedMime,
-            BECCAN_OPTIMIZED_MAX_WIDTH
-        );
-        if ($savedMain) {
-            [$thumbGenerated] = optimize_and_save_gd(
-                $destPath,
-                $thumbPath,
-                $detectedMime,
-                BECCAN_THUMB_MAX_WIDTH
+    // Check decoded raster memory requirement before loading into GD memory
+    $memoryLimitBytes = parse_php_size_bytes((string) ini_get('memory_limit'));
+    if ($memoryLimitBytes > 0) {
+        $estimatedDecodedBytes = (int) ($width * $height * 4 * 2.5);
+        $availableBytes = $memoryLimitBytes - memory_get_usage(true);
+        if ($estimatedDecodedBytes > ($availableBytes * 0.85)) {
+            json_error(
+                "{$prefix}Image pixel dimensions ({$width}×{$height}) exceed available server memory for safe processing. Resize the image before uploading.",
+                422
             );
         }
     }
 
-    if (!is_file($destPath)) {
-        if (PHP_SAPI === 'cli') {
-            if (!copy($tmpPath, $destPath)) {
-                throw new RuntimeException('Failed to store uploaded file.');
-            }
-        } elseif (!move_uploaded_file($tmpPath, $destPath)) {
-            throw new RuntimeException('Failed to store uploaded file.');
-        }
+    $ext = BECCAN_ALLOWED_IMAGE_MIMES[$detectedMime];
+    $randomName = bin2hex(random_bytes(16)) . '.' . $ext;
+    $stagedMainPath = $stagingDir . '/main_' . $randomName;
+    $stagedThumbPath = $stagingDir . '/thumb_' . $randomName;
+
+    [$savedMain, $finalWidth, $finalHeight] = optimize_and_save_gd(
+        $tmpPath,
+        $stagedMainPath,
+        $detectedMime,
+        BECCAN_OPTIMIZED_MAX_WIDTH
+    );
+    if (!$savedMain || !is_file($stagedMainPath) || (int) filesize($stagedMainPath) <= 0) {
+        json_error("{$prefix}Failed to decode and optimize image safely.", 422);
     }
 
-    @chmod($destPath, 0644);
-    if ($thumbGenerated) {
-        @chmod($thumbPath, 0644);
+    [$thumbGenerated] = optimize_and_save_gd(
+        $stagedMainPath,
+        $stagedThumbPath,
+        $detectedMime,
+        BECCAN_THUMB_MAX_WIDTH
+    );
+    if (!$thumbGenerated || !is_file($stagedThumbPath) || (int) filesize($stagedThumbPath) <= 0) {
+        @unlink($stagedMainPath);
+        json_error("{$prefix}Failed to generate image thumbnail.", 422);
     }
+
+    $mainSize = (int) (filesize($stagedMainPath) ?: 0);
+    $thumbSize = (int) (filesize($stagedThumbPath) ?: 0);
 
     $originalName = sanitize_plain_text((string) ($file['name'] ?? ''), 120);
     $originalName = basename(str_replace('\\', '/', $originalName));
 
     return [
-        'imageUrl' => "/uploads/{$bucket}/{$randomName}",
-        'thumbnailUrl' => $thumbGenerated ? "/uploads/{$bucket}/thumbs/{$randomName}" : "/uploads/{$bucket}/{$randomName}",
+        'bucket' => $bucket,
+        'mediaFilename' => $randomName,
+        'stagedMainPath' => $stagedMainPath,
+        'stagedThumbPath' => $stagedThumbPath,
         'originalFilename' => $originalName,
         'mimeType' => $detectedMime,
         'width' => $finalWidth,
         'height' => $finalHeight,
-        'fileSizeBytes' => is_file($destPath) ? (filesize($destPath) ?: $size) : $size,
+        'fileSizeBytes' => $mainSize,
+        'totalStagedBytes' => $mainSize + $thumbSize,
     ];
+}
+
+function check_storage_quota_for_bytes(int $incomingBytes): void
+{
+    $stats = get_media_storage_stats();
+    $limit = $stats['configuredLimitBytes'];
+    if ($limit !== null && ($stats['totalBytes'] + $incomingBytes) > $limit) {
+        $limitMb = number_format($limit / (1024 * 1024), 1);
+        json_error(
+            "Upload blocked: adding this media exceeds the configured storage limit ({$limitMb} MB). Delete unused files or increase the storage limit in Settings.",
+            422
+        );
+    }
+}
+
+function commit_staged_images(array $stagedItems): array
+{
+    $movedPaths = [];
+    try {
+        foreach ($stagedItems as $item) {
+            $bucket = (string) $item['bucket'];
+            $filename = (string) $item['mediaFilename'];
+            $destMain = resolve_private_media_path($bucket, $filename, 'original');
+            $destThumb = resolve_private_media_path($bucket, $filename, 'thumb');
+
+            if ($destMain === null || $destThumb === null) {
+                throw new RuntimeException('Invalid destination media path.');
+            }
+            foreach ([dirname($destMain), dirname($destThumb)] as $dir) {
+                if (!is_dir($dir) && !@mkdir($dir, 0750, true)) {
+                    throw new RuntimeException('Unable to create private media storage directory.');
+                }
+            }
+
+            if (!@rename((string) $item['stagedMainPath'], $destMain)) {
+                throw new RuntimeException('Failed to commit staged photograph to private storage.');
+            }
+            @chmod($destMain, 0640);
+            $movedPaths[] = $destMain;
+
+            if (!@rename((string) $item['stagedThumbPath'], $destThumb)) {
+                throw new RuntimeException('Failed to commit staged thumbnail to private storage.');
+            }
+            @chmod($destThumb, 0640);
+            $movedPaths[] = $destThumb;
+
+            if (!is_file($destMain) || filesize($destMain) <= 0 || !is_file($destThumb) || filesize($destThumb) <= 0) {
+                throw new RuntimeException('Committed media verification failed.');
+            }
+        }
+        return $movedPaths;
+    } catch (Throwable $e) {
+        rollback_committed_images($movedPaths);
+        throw $e;
+    }
+}
+
+function rollback_committed_images(array $paths): void
+{
+    foreach ($paths as $path) {
+        if (is_string($path) && is_file($path)) {
+            @unlink($path);
+        }
+    }
 }
 
 function optimize_and_save_gd(string $sourcePath, string $destPath, string $mime, int $maxWidth): array
@@ -160,7 +363,6 @@ function optimize_and_save_gd(string $sourcePath, string $destPath, string $mime
         return [false, 0, 0];
     }
 
-    // Apply EXIF orientation for JPEG if exif extension is available
     if ($mime === 'image/jpeg' && function_exists('exif_read_data')) {
         $exif = @exif_read_data($sourcePath);
         $orientation = (int) ($exif['Orientation'] ?? 1);
@@ -210,23 +412,25 @@ function optimize_and_save_gd(string $sourcePath, string $destPath, string $mime
     return [$saved, $targetWidth, $targetHeight];
 }
 
-function delete_uploaded_asset(?string $publicUrl): void
+function delete_private_media_asset(string $bucket, ?string $filename): void
 {
-    if ($publicUrl === null || trim($publicUrl) === '') {
+    if (!is_valid_media_filename($filename)) {
         return;
     }
-    if (!preg_match('#^/uploads/(gallery|news|events)/([a-f0-9]{32}\.(jpg|png|webp))$#', $publicUrl, $matches)) {
-        return;
+    $main = resolve_private_media_path($bucket, $filename, 'original');
+    $thumb = resolve_private_media_path($bucket, $filename, 'thumb');
+    if ($main !== null && is_file($main)) {
+        @unlink($main);
     }
-    $bucket = $matches[1];
-    $filename = $matches[2];
-    $mainPath = BECCAN_UPLOADS_DIR . '/' . $bucket . '/' . $filename;
-    $thumbPath = BECCAN_UPLOADS_DIR . '/' . $bucket . '/thumbs/' . $filename;
+    if ($thumb !== null && is_file($thumb)) {
+        @unlink($thumb);
+    }
+}
 
-    if (is_file($mainPath)) {
-        @unlink($mainPath);
-    }
-    if (is_file($thumbPath)) {
-        @unlink($thumbPath);
+function delete_record_media_assets(array $record, string $bucket): void
+{
+    $filename = extract_record_media_filename($record, $bucket);
+    if ($filename !== null) {
+        delete_private_media_asset($bucket, $filename);
     }
 }

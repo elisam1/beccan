@@ -32,7 +32,7 @@ $deletedRecord = mutate_json_collection('gallery', static function (array $curre
     ];
 });
 
-delete_uploaded_asset($deletedRecord['imageUrl'] ?? null);
+delete_record_media_assets($deletedRecord, 'gallery');
 
 json_success([
     'deletedId' => $id,

@@ -1,0 +1,5 @@
+{
+  "storageLimitBytes": null,
+  "storageWarningPercent": 80,
+  "backupRetentionCount": 30
+}

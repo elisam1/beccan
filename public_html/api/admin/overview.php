@@ -98,5 +98,7 @@ json_success([
         'pastEvents' => $pastEvents,
         'backupCount' => count($backups),
     ],
+    'storage' => get_media_storage_stats($gallery),
+    'phpEnvironment' => get_php_upload_environment(),
     'recentActivity' => array_slice($activity, 0, 10),
 ]);

@@ -20,6 +20,9 @@ define('BECCAN_DATA_DIR', $privateRoot . '/data');
 define('BECCAN_BACKUP_DIR', $privateRoot . '/backups');
 define('BECCAN_RATE_LIMIT_DIR', $privateRoot . '/data/rate_limits');
 
+define('BECCAN_MEDIA_DIR', $privateRoot . '/media');
+define('BECCAN_TMP_DIR', $privateRoot . '/tmp/uploads');
+
 // Resolve public_html root whether running locally or on cPanel (sibling directory)
 $publicCandidates = [
     dirname($privateRoot) . '/public_html',
@@ -41,9 +44,10 @@ foreach ([
     BECCAN_DATA_DIR,
     BECCAN_BACKUP_DIR,
     BECCAN_RATE_LIMIT_DIR,
-    BECCAN_UPLOADS_DIR . '/gallery/thumbs',
-    BECCAN_UPLOADS_DIR . '/news/thumbs',
-    BECCAN_UPLOADS_DIR . '/events/thumbs',
+    BECCAN_TMP_DIR,
+    BECCAN_MEDIA_DIR . '/gallery/thumbs',
+    BECCAN_MEDIA_DIR . '/news/thumbs',
+    BECCAN_MEDIA_DIR . '/events/thumbs',
 ] as $dir) {
     if (!is_dir($dir)) {
         @mkdir($dir, 0750, true);
@@ -62,6 +66,7 @@ if (PHP_SAPI !== 'cli') {
 require_once BECCAN_PRIVATE_DIR . '/lib/response.php';
 require_once BECCAN_PRIVATE_DIR . '/lib/validation.php';
 require_once BECCAN_PRIVATE_DIR . '/lib/json_store.php';
+require_once BECCAN_PRIVATE_DIR . '/lib/storage.php';
 require_once BECCAN_PRIVATE_DIR . '/lib/auth.php';
 require_once BECCAN_PRIVATE_DIR . '/lib/upload.php';
 

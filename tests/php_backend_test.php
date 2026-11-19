@@ -47,6 +47,24 @@ function remove_dir(string $dir): void
     rmdir($dir);
 }
 
+function count_real_files(string $dir): int
+{
+    if (!is_dir($dir)) {
+        return 0;
+    }
+    $count = 0;
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::LEAVES_ONLY
+    );
+    foreach ($iterator as $item) {
+        if ($item->isFile() && $item->getFilename() !== '.gitkeep') {
+            $count++;
+        }
+    }
+    return $count;
+}
+
 copy_dir($projectRoot . '/private', $sandbox . '/private');
 copy_dir($projectRoot . '/public_html', $sandbox . '/public_html');
 
@@ -71,7 +89,6 @@ register_shutdown_function(static function () use ($proc, $sandbox): void {
 
 $baseUrl = "http://127.0.0.1:{$port}";
 
-// Wait for server readiness
 $ready = false;
 for ($i = 0; $i < 30; $i++) {
     $fp = @fsockopen('127.0.0.1', $port, $errno, $errstr, 0.2);
@@ -89,11 +106,11 @@ if (!$ready) {
 
 $cookies = [];
 
-function http_request(string $method, string $url, ?string $body = null, array $headers = []): array
+function http_request(string $method, string $url, ?string $body = null, array $headers = [], bool $useCookies = true): array
 {
     global $cookies;
     $headerLines = [];
-    if ($cookies !== []) {
+    if ($useCookies && $cookies !== []) {
         $pairs = [];
         foreach ($cookies as $k => $v) {
             $pairs[] = "{$k}={$v}";
@@ -122,11 +139,15 @@ function http_request(string $method, string $url, ?string $body = null, array $
 
     $status = 0;
     $setCookies = [];
+    $contentType = '';
     foreach ($respHeaders as $h) {
         if (preg_match('#^HTTP/\S+\s+(\d+)#', $h, $m)) {
             $status = (int) $m[1];
         }
-        if (stripos($h, 'Set-Cookie:') === 0) {
+        if (stripos($h, 'Content-Type:') === 0) {
+            $contentType = trim(substr($h, 13));
+        }
+        if ($useCookies && stripos($h, 'Set-Cookie:') === 0) {
             $setCookies[] = trim(substr($h, 11));
             if (preg_match('/^Set-Cookie:\s*([^=]+)=([^;]+)/i', $h, $cm)) {
                 if ($cm[2] === '' || stripos($h, 'Expires=Thu, 01 Jan 1970') !== false) {
@@ -141,19 +162,22 @@ function http_request(string $method, string $url, ?string $body = null, array $
     $decoded = json_decode((string) $raw, true);
     return [
         'status' => $status,
+        'contentType' => $contentType,
+        'headers' => $respHeaders,
+        'raw' => (string) $raw,
         'body' => is_array($decoded) ? $decoded : $raw,
         'setCookies' => $setCookies,
     ];
 }
 
-function http_json(string $method, string $url, ?array $payload = null, ?string $csrf = null): array
+function http_json(string $method, string $url, ?array $payload = null, ?string $csrf = null, bool $useCookies = true): array
 {
     $headers = ['Content-Type' => 'application/json'];
     if ($csrf !== null) {
         $headers['X-CSRF-Token'] = $csrf;
     }
     $body = $payload !== null ? json_encode($payload, JSON_THROW_ON_ERROR) : null;
-    return http_request($method, $url, $body, $headers);
+    return http_request($method, $url, $body, $headers, $useCookies);
 }
 
 function http_multipart(string $url, array $fields, array $files, ?string $csrf = null): array
@@ -239,7 +263,6 @@ for ($attempt = 1; $attempt <= 5; $attempt++) {
 $locked = http_json('POST', "{$baseUrl}/api/auth/login.php", ['username' => 'schooladmin', 'password' => 'BeccanTest#2026']);
 assert_true($locked['status'] === 429, '6. Repeated failed attempts trigger 429 rate-limit lockout');
 
-// Clear rate limit in sandbox to continue testing valid login
 foreach (glob($sandbox . '/private/data/rate_limits/*.json') ?: [] as $rl) {
     unlink($rl);
 }
@@ -272,7 +295,7 @@ $goodPwdChange = http_json('POST', "{$baseUrl}/api/auth/change-password.php", [
 assert_true($goodPwdChange['status'] === 200, '12. Password change succeeds with valid current password');
 $csrf = (string) ($goodPwdChange['body']['data']['csrfToken'] ?? $csrf);
 
-// 7. Gallery upload, MIME rejection, publish/unpublish, delete cleanup
+// Helper test images
 $validImgPath = $sandbox . '/valid_test.jpg';
 $im = imagecreatetruecolor(320, 240);
 $bg = imagecolorallocate($im, 15, 33, 62);
@@ -280,36 +303,211 @@ imagefilledrectangle($im, 0, 0, 319, 239, $bg);
 imagejpeg($im, $validImgPath, 90);
 imagedestroy($im);
 
+$validPngPath = $sandbox . '/valid_test.png';
+$imPng = imagecreatetruecolor(240, 180);
+imagepng($imPng, $validPngPath);
+imagedestroy($imPng);
+
 $fakePhpPath = $sandbox . '/evil.jpg';
 file_put_contents($fakePhpPath, "<?php echo 'hacked'; ?>");
 
+$oversizedPath = $sandbox . '/too_large.jpg';
+file_put_contents($oversizedPath, str_repeat('A', 6300000)); // > 6 MB
+
+// 7. Failure-safe upload validation & atomic rollback checks
 $rejectedUpload = http_multipart(
     "{$baseUrl}/api/gallery/upload.php",
     ['captions[0]' => 'Evil', 'categories[0]' => 'School Life'],
     ['photos[0]' => ['path' => $fakePhpPath, 'filename' => 'evil.jpg', 'mime' => 'image/jpeg']],
     $csrf
 );
-assert_true($rejectedUpload['status'] === 422, '13. Disguised PHP payload upload rejected via Fileinfo MIME check', $rejectedUpload);
+assert_true(
+    $rejectedUpload['status'] === 422 &&
+    count_real_files($sandbox . '/private/media/gallery') === 0 &&
+    count_real_files($sandbox . '/private/tmp') === 0,
+    '13. Disguised PHP payload rejected via Fileinfo MIME check with zero orphaned files',
+    $rejectedUpload
+);
 
+$oversizedRes = http_multipart(
+    "{$baseUrl}/api/gallery/upload.php",
+    ['captions[0]' => 'Oversized', 'categories[0]' => 'School Life'],
+    ['photos[0]' => ['path' => $oversizedPath, 'filename' => 'too_large.jpg', 'mime' => 'image/jpeg']],
+    $csrf
+);
+assert_true(
+    $oversizedRes['status'] === 422 &&
+    count_real_files($sandbox . '/private/media/gallery') === 0,
+    '13b. Oversized (>6MB) upload rejected with zero orphaned files',
+    $oversizedRes
+);
+
+// Invalid metadata in a 2-file batch must reject BEFORE committing first valid file
+$badMetaBatch = http_multipart(
+    "{$baseUrl}/api/gallery/upload.php",
+    [
+        'captions[0]' => 'Valid First',
+        'categories[0]' => 'School Life',
+        'captions[1]' => 'Bad Second',
+        'categories[1]' => 'InvalidCategoryName',
+    ],
+    [
+        'photos[0]' => ['path' => $validImgPath, 'filename' => 'one.jpg', 'mime' => 'image/jpeg'],
+        'photos[1]' => ['path' => $validPngPath, 'filename' => 'two.png', 'mime' => 'image/png'],
+    ],
+    $csrf
+);
+assert_true(
+    $badMetaBatch['status'] === 422 &&
+    count_real_files($sandbox . '/private/media/gallery') === 0 &&
+    count_real_files($sandbox . '/private/tmp') === 0,
+    '13c. Invalid metadata in multi-file batch rejected before committing any file',
+    $badMetaBatch
+);
+
+// Partial batch failure (photo 1 valid, photo 2 invalid MIME) must not leave photo 1 orphaned
+$boundary = '----BeccanBatchFail' . bin2hex(random_bytes(6));
+$batchBody = '';
+$batchFields = [
+    'captions[0]' => 'Valid One',
+    'categories[0]' => 'School Life',
+    'captions[1]' => 'Evil Two',
+    'categories[1]' => 'School Life',
+];
+foreach ($batchFields as $k => $v) {
+    $batchBody .= "--{$boundary}\r\nContent-Disposition: form-data; name=\"{$k}\"\r\n\r\n{$v}\r\n";
+}
+$batchFiles = [
+    ['name' => 'one.jpg', 'mime' => 'image/jpeg', 'path' => $validImgPath],
+    ['name' => 'two.jpg', 'mime' => 'image/jpeg', 'path' => $fakePhpPath],
+];
+foreach ($batchFiles as $bf) {
+    $batchBody .= "--{$boundary}\r\nContent-Disposition: form-data; name=\"photos[]\"; filename=\"{$bf['name']}\"\r\nContent-Type: {$bf['mime']}\r\n\r\n" . file_get_contents($bf['path']) . "\r\n";
+}
+$batchBody .= "--{$boundary}--\r\n";
+$partialFailRes = http_request('POST', "{$baseUrl}/api/gallery/upload.php", $batchBody, [
+    'Content-Type' => "multipart/form-data; boundary={$boundary}",
+    'X-CSRF-Token' => $csrf,
+]);
+assert_true(
+    $partialFailRes['status'] === 422 &&
+    count_real_files($sandbox . '/private/media/gallery') === 0 &&
+    count_real_files($sandbox . '/private/tmp') === 0,
+    '13d. Partial multi-file batch failure cleans up staging and leaves zero orphaned images',
+    $partialFailRes
+);
+
+// Direct verification of JSON write failure rollback cleanup inside private/lib
+$rollbackCheckCmd = sprintf(
+    'php -r %s',
+    escapeshellarg(sprintf(
+        'require %s; $stage = create_upload_staging_dir(); $s = stage_uploaded_image(["name"=>"rb.jpg","tmp_name"=>%s,"error"=>0,"size"=>filesize(%s)], "gallery", $stage); $committed = []; try { mutate_json_collection("gallery", fn($c) => ["records"=>$c,"return"=>true], function() use ($s, &$committed) { $committed = commit_staged_images([$s]); throw new RuntimeException("Simulated JSON write failure"); }, function() use (&$committed) { rollback_committed_images($committed); }); } catch (RuntimeException $e) {} remove_directory_recursive($stage); echo is_file(resolve_private_media_path("gallery", $s["mediaFilename"], "original")) ? "LEAKED" : "CLEAN";',
+        var_export($sandbox . '/private/config/bootstrap.php', true),
+        var_export($validImgPath, true),
+        var_export($validImgPath, true)
+    ))
+);
+$rbOut = trim((string) shell_exec($rollbackCheckCmd));
+assert_true(
+    $rbOut === 'CLEAN' && count_real_files($sandbox . '/private/media/gallery') === 0,
+    '13e. Rollback cleans up committed media files when JSON write fails',
+    $rbOut
+);
+
+// Test post_max_size exceeded handling via dedicated small-limit PHP sub-server
+$smallPort = random_int(28001, 32000);
+$smallCmd = sprintf('php -d post_max_size=1K -d upload_max_filesize=1K -S 127.0.0.1:%d -t %s', $smallPort, escapeshellarg($sandbox . '/public_html'));
+$smallProc = proc_open($smallCmd, $descriptors, $smallPipes);
+$smallReady = false;
+for ($i = 0; $i < 20; $i++) {
+    $fp = @fsockopen('127.0.0.1', $smallPort, $errno, $errstr, 0.2);
+    if ($fp) {
+        fclose($fp);
+        $smallReady = true;
+        break;
+    }
+    usleep(100000);
+}
+if ($smallReady) {
+    $smallLogin = http_json('POST', "http://127.0.0.1:{$smallPort}/api/auth/login.php", ['username' => 'schooladmin', 'password' => 'BeccanNew#2026']);
+    $smallCsrf = (string) ($smallLogin['body']['data']['csrfToken'] ?? '');
+    $postMaxRes = http_multipart(
+        "http://127.0.0.1:{$smallPort}/api/gallery/upload.php",
+        ['captions[0]' => 'Exceeds post_max_size', 'categories[0]' => 'School Life'],
+        ['photos[0]' => ['path' => $validImgPath, 'filename' => 'assembly.jpg', 'mime' => 'image/jpeg']],
+        $smallCsrf
+    );
+    @proc_terminate($smallProc);
+    @proc_close($smallProc);
+    assert_true(
+        $postMaxRes['status'] === 413 && str_contains(strtolower((string) ($postMaxRes['body']['error'] ?? '')), 'post_max_size'),
+        '13f. Exceeding PHP post_max_size returns 413 with clear upload limit explanation',
+        $postMaxRes
+    );
+    // Re-login cleanly on primary server after small-server cookie update
+    $login = http_json('POST', "{$baseUrl}/api/auth/login.php", ['username' => 'schooladmin', 'password' => 'BeccanNew#2026']);
+    $csrf = (string) ($login['body']['data']['csrfToken'] ?? '');
+} else {
+    @proc_terminate($smallProc);
+    @proc_close($smallProc);
+    assert_true(false, '13f. Small post_max_size test server failed to boot');
+}
+
+// 8. Valid gallery upload -> Private storage & media-serving privacy verification
 $goodUpload = http_multipart(
     "{$baseUrl}/api/gallery/upload.php",
     ['captions[0]' => 'Morning Assembly Compound', 'descriptions[0]' => 'Dodowa campus', 'categories[0]' => 'School Life'],
     ['photos[0]' => ['path' => $validImgPath, 'filename' => 'assembly.jpg', 'mime' => 'image/jpeg']],
     $csrf
 );
-assert_true($goodUpload['status'] === 201, '14. Valid JPEG photograph uploads and optimizes via GD');
+assert_true($goodUpload['status'] === 201, '14. Valid JPEG photograph uploads and optimizes via GD', $goodUpload);
 $uploadedPhoto = $goodUpload['body']['data']['items'][0];
 $photoId = $uploadedPhoto['id'];
-$photoRelUrl = $uploadedPhoto['imageUrl'];
-$thumbRelUrl = $uploadedPhoto['thumbnailUrl'];
+$photoFilename = $uploadedPhoto['mediaFilename'];
+$photoServeUrl = $uploadedPhoto['imageUrl'];
+$thumbServeUrl = $uploadedPhoto['thumbnailUrl'];
+
 assert_true(($uploadedPhoto['status'] ?? '') === 'draft', '15. Newly uploaded photo defaults to draft (not auto-published)');
 assert_true(
-    is_file($sandbox . '/public_html' . $photoRelUrl) && is_file($sandbox . '/public_html' . $thumbRelUrl),
-    '16. Uploaded photo and thumbnail written to public_html/uploads/gallery/'
+    str_starts_with($photoServeUrl, '/api/media/serve.php?') &&
+    is_file($sandbox . '/private/media/gallery/' . $photoFilename) &&
+    is_file($sandbox . '/private/media/gallery/thumbs/' . $photoFilename) &&
+    count_real_files($sandbox . '/public_html/uploads/gallery') === 0,
+    '16. Uploaded photo and thumbnail stored strictly in private/media/gallery/ (never public_html/uploads/)'
 );
 
-$pubGalleryBefore = http_json('GET', "{$baseUrl}/api/gallery/list.php");
-assert_true(count($pubGalleryBefore['body']['data']['items']) === 0, '17. Unpublished draft photo hidden from public gallery');
+// Public cannot retrieve draft photo or thumbnail via serve.php
+$pubDraftOrig = http_request('GET', $baseUrl . $photoServeUrl, null, [], false);
+$pubDraftThumb = http_request('GET', $baseUrl . $thumbServeUrl, null, [], false);
+assert_true(
+    $pubDraftOrig['status'] === 403 && $pubDraftThumb['status'] === 403,
+    '16b. Public visitor blocked (403) from retrieving draft gallery photo & thumbnail',
+    ['orig' => $pubDraftOrig['status'], 'thumb' => $pubDraftThumb['status']]
+);
+
+// Authenticated admin CAN preview draft photo & thumbnail via serve.php
+$adminDraftOrig = http_request('GET', $baseUrl . $photoServeUrl, null, [], true);
+$adminDraftThumb = http_request('GET', $baseUrl . $thumbServeUrl, null, [], true);
+assert_true(
+    $adminDraftOrig['status'] === 200 &&
+    str_contains($adminDraftOrig['contentType'], 'image/jpeg') &&
+    strlen($adminDraftOrig['raw']) > 100 &&
+    $adminDraftThumb['status'] === 200 &&
+    str_contains($adminDraftThumb['contentType'], 'image/jpeg'),
+    '16c. Authenticated admin can preview draft gallery photo & thumbnail via serve.php'
+);
+
+// Traversal & filename-only & invalid identifier attempts rejected
+$travRes = http_request('GET', "{$baseUrl}/api/media/serve.php?category=gallery&id=../../private/config/admin.json", null, [], false);
+$rawNameRes = http_request('GET', "{$baseUrl}/api/media/serve.php?category=gallery&id={$photoFilename}", null, [], false);
+$badCatRes = http_request('GET', "{$baseUrl}/api/media/serve.php?category=../config&id={$photoId}", null, [], false);
+assert_true(
+    $travRes['status'] === 400 && $rawNameRes['status'] === 400 && $badCatRes['status'] === 400,
+    '16d. Directory traversal, invalid category, and raw filename probes rejected with 400'
+);
+
+$pubGalleryBefore = http_json('GET', "{$baseUrl}/api/gallery/list.php", null, null, false);
+assert_true(count($pubGalleryBefore['body']['data']['items']) === 0, '17. Unpublished draft photo hidden from public gallery API');
 
 $pubPhoto = http_json('POST', "{$baseUrl}/api/gallery/update.php", [
     'id' => $photoId,
@@ -317,8 +515,23 @@ $pubPhoto = http_json('POST', "{$baseUrl}/api/gallery/update.php", [
 ], $csrf);
 assert_true($pubPhoto['status'] === 200, '18. Admin publishes uploaded photo');
 
-$pubGalleryAfter = http_json('GET', "{$baseUrl}/api/gallery/list.php");
-assert_true(count($pubGalleryAfter['body']['data']['items']) === 1, '19. Published photo appears on public gallery');
+$pubGalleryAfter = http_json('GET', "{$baseUrl}/api/gallery/list.php", null, null, false);
+$pubPublishedOrig = http_request('GET', $baseUrl . $photoServeUrl, null, [], false);
+assert_true(
+    count($pubGalleryAfter['body']['data']['items']) === 1 &&
+    $pubPublishedOrig['status'] === 200 &&
+    str_contains($pubPublishedOrig['contentType'], 'image/jpeg') &&
+    !array_key_exists('mediaFilename', $pubGalleryAfter['body']['data']['items'][0]),
+    '19. Published photo appears on public gallery and streams securely via serve.php without leaking internal mediaFilename'
+);
+
+// Create a backup snapshot before unpublishing/deleting so we test media-aware restore
+$manualSnap = http_json('POST', "{$baseUrl}/api/admin/backups.php", [
+    'action' => 'create',
+    'collection' => 'gallery',
+], $csrf);
+assert_true($manualSnap['status'] === 201 && !empty($manualSnap['body']['data']['snapshotId']), '19a. Manual complete media-aware gallery snapshot created', $manualSnap);
+$galleryBackupId = (string) $manualSnap['body']['data']['snapshotId'];
 
 $editPhoto = http_json('POST', "{$baseUrl}/api/gallery/update.php", [
     'id' => $photoId,
@@ -326,30 +539,109 @@ $editPhoto = http_json('POST', "{$baseUrl}/api/gallery/update.php", [
     'category' => 'Events',
     'status' => 'draft',
 ], $csrf);
+$pubAfterUnpublishImg = http_request('GET', $baseUrl . $photoServeUrl, null, [], false);
 assert_true(
-    $editPhoto['status'] === 200 &&
-    ($editPhoto['body']['data']['item']['caption'] ?? '') === 'Updated Morning Assembly' &&
-    ($editPhoto['body']['data']['item']['status'] ?? '') === 'draft',
-    '19b. Admin edits gallery caption/category and unpublishes photo',
-    $editPhoto
+    $editPhoto['status'] === 200 && $pubAfterUnpublishImg['status'] === 403,
+    '19b. Unpublishing gallery photo immediately revokes public media serve access (403)'
 );
-
-$pubGalleryUnpublished = http_json('GET', "{$baseUrl}/api/gallery/list.php");
-assert_true(count($pubGalleryUnpublished['body']['data']['items']) === 0, '19c. Unpublished photo removed from public gallery');
 
 $delPhoto = http_json('POST', "{$baseUrl}/api/gallery/delete.php", ['id' => $photoId], $csrf);
 clearstatcache(true);
-$adminGalleryAfterDelete = http_json('GET', "{$baseUrl}/api/gallery/list.php?scope=admin");
 assert_true(
     $delPhoto['status'] === 200 &&
-    !is_file($sandbox . '/public_html' . $photoRelUrl) &&
-    !is_file($sandbox . '/public_html' . $thumbRelUrl) &&
-    count($adminGalleryAfterDelete['body']['data']['items'] ?? []) === 0,
-    '20. Deleting gallery photo removes JSON record and image/thumbnail files',
-    ['del' => $delPhoto, 'adminList' => $adminGalleryAfterDelete]
+    !is_file($sandbox . '/private/media/gallery/' . $photoFilename) &&
+    !is_file($sandbox . '/private/media/gallery/thumbs/' . $photoFilename),
+    '20. Deleting gallery photo removes JSON record and private image/thumbnail files'
 );
 
-// 8. News create (with XSS sanitization), draft privacy, publish, edit, archive, cover delete, backup restore
+// Restore media-aware backup -> must restore BOTH JSON record and original + thumbnail files
+$galleryRestore = http_json('POST', "{$baseUrl}/api/admin/backups.php", [
+    'action' => 'restore',
+    'filename' => $galleryBackupId,
+], $csrf);
+clearstatcache(true);
+$restoredPublicServe = http_request('GET', $baseUrl . $photoServeUrl, null, [], false);
+assert_true(
+    $galleryRestore['status'] === 200 &&
+    ($galleryRestore['body']['data']['recordCount'] ?? 0) === 1 &&
+    ($galleryRestore['body']['data']['restoredMediaFiles'] ?? 0) === 2 &&
+    !empty($galleryRestore['body']['data']['safetyBackupId']) &&
+    is_dir($sandbox . '/private/backups/' . $galleryRestore['body']['data']['safetyBackupId']) &&
+    is_file($sandbox . '/private/media/gallery/' . $photoFilename) &&
+    is_file($sandbox . '/private/media/gallery/thumbs/' . $photoFilename) &&
+    $restoredPublicServe['status'] === 200,
+    '20b. Restoring media-aware gallery backup restores JSON, original, thumbnail, safety snapshot, and live serving',
+    $galleryRestore
+);
+
+// Test failed restoration (missing media inside snapshot) leaves existing live content untouched!
+$corruptSnapId = 'gallery_20250101_000000_dead01';
+copy_dir($sandbox . '/private/backups/' . $galleryBackupId, $sandbox . '/private/backups/' . $corruptSnapId);
+unlink($sandbox . '/private/backups/' . $corruptSnapId . '/media/gallery/' . $photoFilename);
+$failedRestore = http_json('POST', "{$baseUrl}/api/admin/backups.php", [
+    'action' => 'restore',
+    'filename' => $corruptSnapId,
+], $csrf);
+clearstatcache(true);
+$liveAfterFailedRestore = http_json('GET', "{$baseUrl}/api/gallery/list.php", null, null, false);
+assert_true(
+    $failedRestore['status'] === 422 &&
+    count($liveAfterFailedRestore['body']['data']['items'] ?? []) === 1 &&
+    is_file($sandbox . '/private/media/gallery/' . $photoFilename),
+    '20c. Failed restoration due to missing backup media aborts safely and preserves live JSON + media',
+    $failedRestore
+);
+
+// 9. Storage monitoring & quota enforcement verification
+$storageRes = http_json('GET', "{$baseUrl}/api/admin/storage.php");
+$expectedMainSize = (int) filesize($sandbox . '/private/media/gallery/' . $photoFilename);
+$expectedThumbSize = (int) filesize($sandbox . '/private/media/gallery/thumbs/' . $photoFilename);
+assert_true(
+    $storageRes['status'] === 200 &&
+    array_key_exists('configuredLimitBytes', $storageRes['body']['data']['storage'] ?? []) &&
+    $storageRes['body']['data']['storage']['configuredLimitBytes'] === null &&
+    ($storageRes['body']['data']['storage']['totalOriginalsCount'] ?? 0) === 1 &&
+    ($storageRes['body']['data']['storage']['totalThumbnailsCount'] ?? 0) === 1 &&
+    ($storageRes['body']['data']['storage']['totalBytes'] ?? 0) === ($expectedMainSize + $expectedThumbSize),
+    '20d. Storage monitor accurately sums real filesystem bytes & counts and leaves unconfigured limit as null',
+    $storageRes
+);
+
+// Missing media directory resilience
+remove_dir($sandbox . '/private/media/events');
+$storageMissingDir = http_json('GET', "{$baseUrl}/api/admin/storage.php");
+assert_true(
+    $storageMissingDir['status'] === 200 && ($storageMissingDir['body']['data']['storage']['events']['totalBytes'] ?? -1) === 0,
+    '20e. Storage monitor handles missing media subdirectory gracefully with zero counts'
+);
+if (!is_dir($sandbox . '/private/media/events/thumbs')) {
+    mkdir($sandbox . '/private/media/events/thumbs', 0750, true);
+}
+
+// Enforce storage quota limit tightly just above current usage, verify next upload blocked cleanly
+$setQuota = http_json('POST', "{$baseUrl}/api/admin/storage.php", [
+    'storageLimitBytes' => $expectedMainSize + $expectedThumbSize + 50,
+    'storageWarningPercent' => 80,
+], $csrf);
+$quotaBlockedUpload = http_multipart(
+    "{$baseUrl}/api/gallery/upload.php",
+    ['captions[0]' => 'Quota Exceeded Photo', 'categories[0]' => 'School Life'],
+    ['photos[0]' => ['path' => $validPngPath, 'filename' => 'quota.png', 'mime' => 'image/png']],
+    $csrf
+);
+assert_true(
+    $setQuota['status'] === 200 &&
+    ($setQuota['body']['data']['storage']['approachingLimit'] ?? false) === true &&
+    $quotaBlockedUpload['status'] === 422 &&
+    count_real_files($sandbox . '/private/media/gallery') === 2,
+    '20f. Configurable storage limit triggers approaching warning and blocks uploads exceeding quota with zero orphans',
+    ['quota' => $setQuota, 'blocked' => $quotaBlockedUpload]
+);
+
+// Clear limit to proceed with news & events tests
+http_json('POST', "{$baseUrl}/api/admin/storage.php", ['storageLimitBytes' => null], $csrf);
+
+// 10. News create (draft cover image privacy), publish, edit, archive, delete
 $newsDraft = http_multipart(
     "{$baseUrl}/api/news/create.php",
     [
@@ -362,20 +654,34 @@ $newsDraft = http_multipart(
     ['coverImage' => ['path' => $validImgPath, 'filename' => 'science-cover.jpg', 'mime' => 'image/jpeg']],
     $csrf
 );
-assert_true($newsDraft['status'] === 201, '21. News draft created with cover image', $newsDraft);
+assert_true($newsDraft['status'] === 201, '21. News draft created with private cover image', $newsDraft);
 $newsId = $newsDraft['body']['data']['article']['id'];
 $newsSlug = $newsDraft['body']['data']['article']['slug'];
-$newsCoverUrl = (string) ($newsDraft['body']['data']['article']['coverImageUrl'] ?? '');
+$newsCoverServeUrl = (string) ($newsDraft['body']['data']['article']['coverImageUrl'] ?? '');
+$newsMediaFile = (string) ($newsDraft['body']['data']['article']['mediaFilename'] ?? '');
+
+$pubNewsDraftCover = http_request('GET', $baseUrl . $newsCoverServeUrl, null, [], false);
+$adminNewsDraftCover = http_request('GET', $baseUrl . $newsCoverServeUrl, null, [], true);
+assert_true(
+    $pubNewsDraftCover['status'] === 403 && $adminNewsDraftCover['status'] === 200,
+    '21b. Draft news cover image blocked publicly (403) while admin preview succeeds (200)'
+);
 assert_true(!str_contains($newsDraft['body']['data']['article']['content'], '<script>'), '22. Article content strips executable HTML/script tags');
 
-$draftPublicFetch = http_json('GET', "{$baseUrl}/api/news/article.php?slug=" . urlencode($newsSlug));
+$draftPublicFetch = http_json('GET', "{$baseUrl}/api/news/article.php?slug=" . urlencode($newsSlug), null, null, false);
 assert_true($draftPublicFetch['status'] === 404, '23. Draft news article is inaccessible (404) on public endpoint');
 
 $newsPub = http_json('POST', "{$baseUrl}/api/news/publish.php", ['id' => $newsId, 'status' => 'published'], $csrf);
-assert_true($newsPub['status'] === 200, '24. News article published');
+$pubNewsLiveCover = http_request('GET', $baseUrl . $newsCoverServeUrl, null, [], false);
+assert_true($newsPub['status'] === 200 && $pubNewsLiveCover['status'] === 200, '24. Published news article & cover image accessible publicly');
 
-$pubArticleFetch = http_json('GET', "{$baseUrl}/api/news/article.php?slug=" . urlencode($newsSlug));
-assert_true($pubArticleFetch['status'] === 200 && ($pubArticleFetch['body']['data']['article']['slug'] ?? '') === $newsSlug, '25. Published article resolves via slug publicly');
+$pubArticleFetch = http_json('GET', "{$baseUrl}/api/news/article.php?slug=" . urlencode($newsSlug), null, null, false);
+assert_true(
+    $pubArticleFetch['status'] === 200 &&
+    ($pubArticleFetch['body']['data']['article']['slug'] ?? '') === $newsSlug &&
+    !array_key_exists('mediaFilename', $pubArticleFetch['body']['data']['article']),
+    '25. Published article resolves via slug publicly without leaking mediaFilename'
+);
 
 $newsEdit = http_json('POST', "{$baseUrl}/api/news/update.php", [
     'id' => $newsId,
@@ -385,13 +691,16 @@ $newsEdit = http_json('POST', "{$baseUrl}/api/news/update.php", [
 assert_true($newsEdit['status'] === 200 && ($newsEdit['body']['data']['article']['title'] ?? '') === 'Updated Term Science Fair', '25b. Admin edits news article');
 
 $newsArchive = http_json('POST', "{$baseUrl}/api/news/publish.php", ['id' => $newsId, 'status' => 'archived'], $csrf);
-$archivedPublicFetch = http_json('GET', "{$baseUrl}/api/news/article.php?slug=" . urlencode($newsSlug));
-assert_true($newsArchive['status'] === 200 && $archivedPublicFetch['status'] === 404, '25c. Archived news article is hidden from public website');
+$archivedPublicFetch = http_json('GET', "{$baseUrl}/api/news/article.php?slug=" . urlencode($newsSlug), null, null, false);
+$archivedCoverFetch = http_request('GET', $baseUrl . $newsCoverServeUrl, null, [], false);
+assert_true(
+    $newsArchive['status'] === 200 && $archivedPublicFetch['status'] === 404 && $archivedCoverFetch['status'] === 403,
+    '25c. Archived news article and its cover image are hidden from public website'
+);
 
 $newsRepublish = http_json('POST', "{$baseUrl}/api/news/publish.php", ['id' => $newsId, 'status' => 'published'], $csrf);
 assert_true($newsRepublish['status'] === 200, '25d. News article re-published');
 
-// Create second article then restore earlier backup
 $newsSecond = http_multipart(
     "{$baseUrl}/api/news/create.php",
     [
@@ -404,27 +713,38 @@ $newsSecond = http_multipart(
     [],
     $csrf
 );
-assert_true($newsSecond['status'] === 201, '26. Second news article created (triggering pre-write backup)');
+assert_true($newsSecond['status'] === 201, '26. Second news article created (triggering media-aware backup)');
 
 $backupsList = http_json('GET', "{$baseUrl}/api/admin/backups.php");
 $newsBackups = array_values(array_filter(
     $backupsList['body']['data']['backups'] ?? [],
     static fn (array $b): bool => $b['collection'] === 'news'
 ));
-assert_true(count($newsBackups) >= 1, '27. Pre-write backup snapshot created for news');
+assert_true(
+    count($newsBackups) >= 1 && ($newsBackups[0]['includesMedia'] ?? false) === true,
+    '27. Pre-write media-aware snapshot created for news',
+    $backupsList
+);
 $latestNewsBackup = $newsBackups[0]['filename'];
 
 $restoreRes = http_json('POST', "{$baseUrl}/api/admin/backups.php", ['filename' => $latestNewsBackup], $csrf);
-assert_true($restoreRes['status'] === 200 && ($restoreRes['body']['data']['recordCount'] ?? 0) === 1, '28. Backup restoration rolls news.json back to 1 article');
+assert_true(
+    $restoreRes['status'] === 200 &&
+    ($restoreRes['body']['data']['recordCount'] ?? 0) === 1 &&
+    ($restoreRes['body']['data']['restoredMediaFiles'] ?? 0) === 2,
+    '28. Backup restoration rolls news back to 1 article and verifies both cover image files'
+);
 
 $newsDelete = http_json('POST', "{$baseUrl}/api/news/delete.php", ['id' => $newsId], $csrf);
 clearstatcache(true);
 assert_true(
-    $newsDelete['status'] === 200 && ($newsCoverUrl === '' || !is_file($sandbox . '/public_html' . $newsCoverUrl)),
-    '28b. Deleting news article removes record and cover image file'
+    $newsDelete['status'] === 200 &&
+    !is_file($sandbox . '/private/media/news/' . $newsMediaFile) &&
+    !is_file($sandbox . '/private/media/news/thumbs/' . $newsMediaFile),
+    '28b. Deleting news article removes record and private cover image files'
 );
 
-// 9. Announcements expiry, edit & delete rules
+// 11. Announcements expiry, edit & delete rules
 $annActive = http_json('POST', "{$baseUrl}/api/announcements/create.php", [
     'title' => 'Active Urgent Notice',
     'message' => 'School gate opens at 7:00 AM.',
@@ -441,7 +761,7 @@ $annExpired = http_json('POST', "{$baseUrl}/api/announcements/create.php", [
 assert_true($annActive['status'] === 201 && $annExpired['status'] === 201, '29. Created active and expired announcements');
 $annActiveId = $annActive['body']['data']['item']['id'];
 
-$pubAnn = http_json('GET', "{$baseUrl}/api/announcements/list.php");
+$pubAnn = http_json('GET', "{$baseUrl}/api/announcements/list.php", null, null, false);
 assert_true(
     count($pubAnn['body']['data']['items']) === 1 &&
     $pubAnn['body']['data']['items'][0]['title'] === 'Active Urgent Notice',
@@ -453,7 +773,7 @@ $annEdit = http_json('POST', "{$baseUrl}/api/announcements/update.php", [
     'priority' => 'Important',
     'status' => 'draft',
 ], $csrf);
-$pubAnnAfterUnpub = http_json('GET', "{$baseUrl}/api/announcements/list.php");
+$pubAnnAfterUnpub = http_json('GET', "{$baseUrl}/api/announcements/list.php", null, null, false);
 assert_true(
     $annEdit['status'] === 200 && count($pubAnnAfterUnpub['body']['data']['items']) === 0,
     '30b. Editing and unpublishing announcement removes it from public feed'
@@ -462,7 +782,7 @@ assert_true(
 $annDel = http_json('POST', "{$baseUrl}/api/announcements/delete.php", ['id' => $annActiveId], $csrf);
 assert_true($annDel['status'] === 200, '30c. Announcement deleted');
 
-// 10. Events upcoming vs past separation, edit & delete
+// 12. Events upcoming vs past, draft event cover privacy, edit & delete
 $evtUpcoming = http_multipart("{$baseUrl}/api/events/create.php", [
     'title' => 'Future Speech Day',
     'description' => 'Annual celebration.',
@@ -485,12 +805,25 @@ $evtDraft = http_multipart("{$baseUrl}/api/events/create.php", [
     'eventDate' => '2099-06-01',
     'venue' => 'Hall',
     'status' => 'draft',
-], [], $csrf);
+], ['coverImage' => ['path' => $validPngPath, 'filename' => 'draft-event.png', 'mime' => 'image/png']], $csrf);
 assert_true($evtUpcoming['status'] === 201 && $evtPast['status'] === 201 && $evtDraft['status'] === 201, '31. Created upcoming, past, and draft events');
-$evtUpcomingId = $evtUpcoming['body']['data']['item']['id'];
-$evtCoverUrl = (string) ($evtUpcoming['body']['data']['item']['coverImageUrl'] ?? '');
 
-$pubEvents = http_json('GET', "{$baseUrl}/api/events/list.php");
+$evtUpcomingId = $evtUpcoming['body']['data']['item']['id'];
+$evtMediaFile = (string) ($evtUpcoming['body']['data']['item']['mediaFilename'] ?? '');
+$evtPubCoverUrl = (string) ($evtUpcoming['body']['data']['item']['coverImageUrl'] ?? '');
+$evtDraftCoverUrl = (string) ($evtDraft['body']['data']['item']['coverImageUrl'] ?? '');
+
+$pubDraftEventCover = http_request('GET', $baseUrl . $evtDraftCoverUrl, null, [], false);
+$adminDraftEventCover = http_request('GET', $baseUrl . $evtDraftCoverUrl, null, [], true);
+$pubLiveEventCover = http_request('GET', $baseUrl . $evtPubCoverUrl, null, [], false);
+assert_true(
+    $pubDraftEventCover['status'] === 403 &&
+    $adminDraftEventCover['status'] === 200 &&
+    $pubLiveEventCover['status'] === 200,
+    '31b. Draft event cover blocked publicly (403), previewable by admin (200), published event cover served publicly (200)'
+);
+
+$pubEvents = http_json('GET', "{$baseUrl}/api/events/list.php", null, null, false);
 assert_true(
     count($pubEvents['body']['data']['upcoming']) === 1 &&
     count($pubEvents['body']['data']['past']) === 1 &&
@@ -507,17 +840,75 @@ assert_true($evtEdit['status'] === 200 && ($evtEdit['body']['data']['item']['ven
 $evtDel = http_json('POST', "{$baseUrl}/api/events/delete.php", ['id' => $evtUpcomingId], $csrf);
 clearstatcache(true);
 assert_true(
-    $evtDel['status'] === 200 && ($evtCoverUrl === '' || !is_file($sandbox . '/public_html' . $evtCoverUrl)),
-    '32c. Deleting event removes record and cover image'
+    $evtDel['status'] === 200 &&
+    !is_file($sandbox . '/private/media/events/' . $evtMediaFile) &&
+    !is_file($sandbox . '/private/media/events/thumbs/' . $evtMediaFile),
+    '32c. Deleting event removes record and private cover image files'
 );
 
-// 11. Logout invalidates session
+// 13. ZIP archive capability check & JSON-only download check
+$capRes = http_json('GET', "{$baseUrl}/api/admin/backups.php");
+$zipSupported = (bool) ($capRes['body']['data']['capabilities']['zipArchiveSupported'] ?? false);
+$jsonDownload = http_request('GET', "{$baseUrl}/api/admin/backups.php?download={$galleryBackupId}&format=json", null, [], true);
+$zipDownload = http_request('GET', "{$baseUrl}/api/admin/backups.php?download={$galleryBackupId}&format=zip", null, [], true);
+assert_true(
+    $jsonDownload['status'] === 200 &&
+    is_array($jsonDownload['body']) &&
+    ($zipSupported ? $zipDownload['status'] === 200 : $zipDownload['status'] === 501),
+    '32d. JSON-only backup export downloads cleanly and ZIP download accurately checks ZipArchive availability',
+    ['zipSupported' => $zipSupported, 'zipStatus' => $zipDownload['status']]
+);
+
+// 14. Legacy media CLI migration verification
+$legacyHex = bin2hex(random_bytes(16)) . '.jpg';
+copy($validImgPath, $sandbox . '/public_html/uploads/gallery/' . $legacyHex);
+if (!is_dir($sandbox . '/public_html/uploads/gallery/thumbs')) {
+    mkdir($sandbox . '/public_html/uploads/gallery/thumbs', 0750, true);
+}
+copy($validImgPath, $sandbox . '/public_html/uploads/gallery/thumbs/' . $legacyHex);
+$legacyRecord = [[
+    'id' => 'gal_0123456789abcdef',
+    'caption' => 'Legacy Migrated Photo',
+    'description' => 'From old uploads dir',
+    'category' => 'Facilities',
+    'imageUrl' => '/uploads/gallery/' . $legacyHex,
+    'thumbnailUrl' => '/uploads/gallery/thumbs/' . $legacyHex,
+    'status' => 'published',
+    'uploadedAt' => '2026-01-01T00:00:00Z',
+    'updatedAt' => '2026-01-01T00:00:00Z',
+    'publishedAt' => '2026-01-01T00:00:00Z',
+]];
+file_put_contents($sandbox . '/private/data/gallery.json', json_encode($legacyRecord, JSON_PRETTY_PRINT));
+$migOut = [];
+$migCode = 0;
+exec(sprintf('php %s 2>&1', escapeshellarg($sandbox . '/private/cli/migrate-legacy-media.php')), $migOut, $migCode);
+clearstatcache(true);
+$migratedGallery = json_decode((string) file_get_contents($sandbox . '/private/data/gallery.json'), true);
+$migratedServe = http_request('GET', $baseUrl . ($migratedGallery[0]['imageUrl'] ?? ''), null, [], false);
+assert_true(
+    $migCode === 0 &&
+    is_file($sandbox . '/private/media/gallery/' . $legacyHex) &&
+    is_file($sandbox . '/public_html/uploads/gallery/' . $legacyHex) &&
+    $migratedServe['status'] === 200,
+    '32e. Legacy migration moves record to private/media & serve.php while preserving old files until verified',
+    $migOut
+);
+exec(sprintf('php %s --cleanup-verified 2>&1', escapeshellarg($sandbox . '/private/cli/migrate-legacy-media.php')), $migCleanOut, $migCleanCode);
+clearstatcache(true);
+assert_true(
+    $migCleanCode === 0 &&
+    !is_file($sandbox . '/public_html/uploads/gallery/' . $legacyHex) &&
+    is_file($sandbox . '/private/media/gallery/' . $legacyHex),
+    '32f. Legacy migration --cleanup-verified removes old public copies safely once private files verified'
+);
+
+// 15. Logout invalidates session
 $logout = http_json('POST', "{$baseUrl}/api/auth/logout.php", [], $csrf);
 assert_true($logout['status'] === 200, '33. Logout succeeds');
 $afterLogout = http_json('GET', "{$baseUrl}/api/admin/overview.php");
 assert_true($afterLogout['status'] === 401, '34. Logout destroys session and blocks subsequent admin access');
 
-// 12. One-time web token setup verification (when admin.json does not yet exist)
+// 16. One-time web token setup verification
 unlink($sandbox . '/private/config/admin.json');
 file_put_contents($sandbox . '/private/config/setup-token.txt', "beccan-one-time-token-98765\n");
 
@@ -551,4 +942,4 @@ $repeatSetup = http_json('POST', "{$baseUrl}/api/auth/setup.php", [
 ]);
 assert_true($repeatSetup['status'] === 403, '37. Repeated web setup blocked after admin configuration');
 
-fwrite(STDOUT, "\nAll {$passed} PHP backend security & CMS assertions passed.\n");
+fwrite(STDOUT, "\nAll {$passed} PHP backend security, privacy, backup, upload, and storage assertions passed.\n");

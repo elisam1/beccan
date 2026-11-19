@@ -1,14 +1,20 @@
 import {
   AdminOverviewData,
   AnnouncementPriority,
+  BackupCapabilities,
   BackupFileInfo,
   CmsAnnouncement,
+  CmsCollectionName,
   CmsEvent,
   CmsGalleryCategory,
   CmsGalleryPhoto,
   CmsNewsArticle,
   CmsNewsCategory,
+  CmsSettings,
+  MediaStorageSummary,
+  PhpUploadEnvironment,
   PublishStatus,
+  RestoreBackupResult,
   SessionState,
 } from '../types/cms';
 
@@ -177,26 +183,59 @@ export const cmsApi = {
     return { message: res.message };
   },
 
-  // Admin Overview & Backups
+  // Admin Overview, Storage & Backups
   getOverview: () =>
     requestJson<AdminOverviewData>('/api/admin/overview.php', { method: 'GET' }),
 
+  getStorageAndLimits: () =>
+    requestJson<{
+      storage: MediaStorageSummary;
+      phpEnvironment: PhpUploadEnvironment;
+      settings: CmsSettings;
+    }>('/api/admin/storage.php', { method: 'GET' }),
+
+  updateStorageSettings: (payload: {
+    storageLimitBytes?: number | null;
+    storageWarningPercent?: number;
+    backupRetentionCount?: number;
+  }) =>
+    requestJson<{
+      settings: CmsSettings;
+      storage: MediaStorageSummary;
+      phpEnvironment: PhpUploadEnvironment;
+    }>('/api/admin/storage.php', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   listBackups: () =>
-    requestJson<{ backups: BackupFileInfo[] }>('/api/admin/backups.php', {
+    requestJson<{
+      backups: BackupFileInfo[];
+      capabilities: BackupCapabilities;
+    }>('/api/admin/backups.php', {
       method: 'GET',
     }),
 
-  restoreBackup: (filename: string) =>
-    requestJson<{ collection: string; restoredFrom: string; recordCount: number }>(
+  createBackup: (collection: CmsCollectionName) =>
+    requestJson<{ snapshotId: string; collection: CmsCollectionName }>(
       '/api/admin/backups.php',
       {
         method: 'POST',
-        body: JSON.stringify({ filename }),
+        body: JSON.stringify({ action: 'create', collection }),
       },
     ),
 
-  getBackupDownloadUrl: (filename: string) =>
-    `${API_BASE}/api/admin/backups.php?download=${encodeURIComponent(filename)}`,
+  restoreBackup: (filename: string) =>
+    requestJson<RestoreBackupResult>('/api/admin/backups.php', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'restore', filename }),
+    }),
+
+  getBackupJsonDownloadUrl: (filename: string) =>
+    `${API_BASE}/api/admin/backups.php?download=${encodeURIComponent(filename)}&format=json`,
+
+  getBackupZipDownloadUrl: (filename: string) =>
+    `${API_BASE}/api/admin/backups.php?download=${encodeURIComponent(filename)}&format=zip`,
 
   // Gallery
   listPublicGallery: (category?: string) => {

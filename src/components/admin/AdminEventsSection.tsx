@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Archive,
   CalendarDays,
   Edit3,
@@ -12,9 +13,15 @@ import {
 } from 'lucide-react';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiError, cmsApi } from '../../services/cmsApi';
-import { CmsEvent, PublishStatus } from '../../types/cms';
+import {
+  CmsEvent,
+  MediaStorageSummary,
+  PhpUploadEnvironment,
+  PublishStatus,
+} from '../../types/cms';
 import {
   formatDisplayDate,
+  formatFileSize,
   formatTimeRange,
   splitParagraphs,
 } from '../../utils/formatting';
@@ -44,6 +51,18 @@ export function AdminEventsSection() {
   const [previewEvent, setPreviewEvent] = useState<CmsEvent | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CmsEvent | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [storage, setStorage] = useState<MediaStorageSummary | null>(null);
+  const [phpEnv, setPhpEnv] = useState<PhpUploadEnvironment | null>(null);
+
+  const loadStorageInfo = useCallback(async () => {
+    try {
+      const res = await cmsApi.getStorageAndLimits();
+      setStorage(res.storage);
+      setPhpEnv(res.phpEnvironment);
+    } catch {
+      // Non-blocking
+    }
+  }, []);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -60,7 +79,8 @@ export function AdminEventsSection() {
 
   useEffect(() => {
     void loadEvents();
-  }, [loadEvents]);
+    void loadStorageInfo();
+  }, [loadEvents, loadStorageInfo]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -348,6 +368,26 @@ export function AdminEventsSection() {
                   </div>
                 )}
               </div>
+              {phpEnv && (
+                <p className="text-xs text-[#5B6472] mt-1.5 tabular-nums">
+                  Stored privately until event publication. Server limit:{' '}
+                  {phpEnv.uploadMaxFilesize} per file.
+                </p>
+              )}
+              {(storage?.approachingLimit ||
+                storage?.overLimit ||
+                (phpEnv && (!phpEnv.gdLoaded || !phpEnv.fileinfoLoaded))) && (
+                <p className="mt-2 text-xs text-[#9A3412] flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {phpEnv && (!phpEnv.gdLoaded || !phpEnv.fileinfoLoaded)
+                      ? 'Image uploads disabled until PHP GD and Fileinfo extensions are enabled.'
+                      : storage?.overLimit
+                        ? `Media storage limit reached (${formatFileSize(storage.totalBytes)}). Event image upload will be blocked.`
+                        : `Storage at ${storage?.usagePercent}% of limit (${formatFileSize(storage?.remainingBytes || 0)} remaining).`}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
 

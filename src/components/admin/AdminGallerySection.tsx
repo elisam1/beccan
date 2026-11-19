@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Check,
   Edit3,
   Eye,
@@ -14,7 +15,12 @@ import {
   cmsApi,
   GALLERY_CATEGORIES,
 } from '../../services/cmsApi';
-import { CmsGalleryCategory, CmsGalleryPhoto } from '../../types/cms';
+import {
+  CmsGalleryCategory,
+  CmsGalleryPhoto,
+  MediaStorageSummary,
+  PhpUploadEnvironment,
+} from '../../types/cms';
 import { formatDisplayDate, formatFileSize } from '../../utils/formatting';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PublishStatusLabel } from './StatusLabel';
@@ -53,6 +59,20 @@ export function AdminGallerySection() {
   const [deleteTarget, setDeleteTarget] = useState<CmsGalleryPhoto | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Storage & PHP upload safeguards
+  const [storage, setStorage] = useState<MediaStorageSummary | null>(null);
+  const [phpEnv, setPhpEnv] = useState<PhpUploadEnvironment | null>(null);
+
+  const loadStorageInfo = useCallback(async () => {
+    try {
+      const res = await cmsApi.getStorageAndLimits();
+      setStorage(res.storage);
+      setPhpEnv(res.phpEnvironment);
+    } catch {
+      // Non-blocking safeguard metadata
+    }
+  }, []);
+
   const loadPhotos = useCallback(async () => {
     setLoading(true);
     try {
@@ -74,7 +94,8 @@ export function AdminGallerySection() {
 
   useEffect(() => {
     void loadPhotos();
-  }, [loadPhotos]);
+    void loadStorageInfo();
+  }, [loadPhotos, loadStorageInfo]);
 
   useEffect(() => {
     return () => {
@@ -129,7 +150,7 @@ export function AdminGallerySection() {
       setFeedback(
         `${res.items.length} photograph${res.items.length === 1 ? '' : 's'} uploaded as unpublished draft${res.items.length === 1 ? '' : 's'}. Review and click Publish when ready.`,
       );
-      await loadPhotos();
+      await Promise.all([loadPhotos(), loadStorageInfo()]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Upload failed.');
     } finally {
@@ -189,7 +210,7 @@ export function AdminGallerySection() {
       await cmsApi.deleteGalleryPhoto(deleteTarget.id);
       setDeleteTarget(null);
       setFeedback('Photograph and image files permanently deleted.');
-      await loadPhotos();
+      await Promise.all([loadPhotos(), loadStorageInfo()]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Delete failed.');
     } finally {
@@ -210,9 +231,17 @@ export function AdminGallerySection() {
               Upload Photographs
             </h2>
             <p className="text-xs sm:text-sm text-[#5B6472] mt-1">
-              Accepts JPEG, PNG, or WebP up to 6 MB each. Uploaded photos stay{' '}
-              <strong>unpublished</strong> until you confirm publication.
+              Accepts JPEG, PNG, or WebP up to 6 MB each. Uploaded photos stay
+              in private storage as <strong>unpublished drafts</strong> until
+              you confirm publication.
             </p>
+            {phpEnv && (
+              <p className="text-xs text-[#5B6472] mt-1 tabular-nums">
+                Server caps: max {Math.min(12, phpEnv.maxFileUploads)} files per
+                batch · {phpEnv.uploadMaxFilesize} per file ·{' '}
+                {phpEnv.postMaxSize} total request.
+              </p>
+            )}
           </div>
 
           <label className="min-h-[44px] inline-flex items-center gap-2 px-5 py-2.5 bg-[#0F213E] text-[#FBF9F5] text-sm font-medium hover:bg-[#172E54] transition-colors cursor-pointer whitespace-nowrap shrink-0">
@@ -227,6 +256,43 @@ export function AdminGallerySection() {
             />
           </label>
         </div>
+
+        {(storage?.approachingLimit ||
+          storage?.overLimit ||
+          (phpEnv && (!phpEnv.gdLoaded || !phpEnv.fileinfoLoaded))) && (
+          <div
+            role="alert"
+            className="p-3.5 bg-[#FFF5F2] border border-[#E6B8A8] text-xs sm:text-sm text-[#9A3412] flex items-start gap-2.5"
+          >
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              {phpEnv && (!phpEnv.gdLoaded || !phpEnv.fileinfoLoaded) && (
+                <p>
+                  Uploads blocked: missing required PHP extension(s) (
+                  {!phpEnv.fileinfoLoaded ? 'Fileinfo ' : ''}
+                  {!phpEnv.gdLoaded ? 'GD' : ''}).
+                </p>
+              )}
+              {storage?.overLimit ? (
+                <p>
+                  Configured storage limit reached (
+                  {formatFileSize(storage.totalBytes)} /{' '}
+                  {formatFileSize(storage.configuredLimitBytes || 0)}). Free
+                  space or adjust the limit in Account Settings before
+                  uploading.
+                </p>
+              ) : (
+                storage?.approachingLimit && (
+                  <p>
+                    Storage usage is at {storage.usagePercent}% of the
+                    configured limit ({formatFileSize(storage.remainingBytes || 0)}{' '}
+                    remaining).
+                  </p>
+                )
+              )}
+            </div>
+          </div>
+        )}
 
         {staged.length > 0 && (
           <div className="space-y-4 pt-4 border-t border-[#E6DFD3]">

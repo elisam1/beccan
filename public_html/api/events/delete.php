@@ -31,7 +31,7 @@ $removed = mutate_json_collection('events', static function (array $current) use
     ];
 });
 
-delete_uploaded_asset($removed['coverImageUrl'] ?? null);
+delete_record_media_assets($removed, 'events');
 
 json_success([
     'deletedId' => $id,
